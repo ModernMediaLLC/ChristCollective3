@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useContext } from "react";
+import React, { createContext, ReactNode, useContext, useEffect } from "react";
 import {
   useQuery,
   useMutation,
@@ -7,6 +7,8 @@ import {
 import { apiRequest, getQueryFn, queryClient } from "../lib/queryClient";
 import { useToast } from "./use-toast";
 import { isNativeApp } from "@/lib/platform";
+import { secureSet, secureGet, secureRemove } from "@/lib/secure-storage";
+import { registerPushNotifications } from "@/lib/push-notifications";
 
 import { User } from "@shared/schema";
 
@@ -42,6 +44,28 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+
+  // On native: when app resumes from background, re-sync sessionId from
+  // persistent Preferences storage into localStorage (in case iOS cleared it)
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let cleanup: (() => void) | undefined;
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("appStateChange", async ({ isActive }) => {
+        if (isActive) {
+          const stored = await secureGet("sessionId");
+          if (stored && localStorage.getItem("sessionId") !== stored) {
+            localStorage.setItem("sessionId", stored);
+            queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+          }
+        }
+      }).then((handle) => {
+        cleanup = () => handle.remove();
+      });
+    });
+    return () => cleanup?.();
+  }, []);
+
   const {
     data: user,
     error,
@@ -76,14 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: any) => {
-      // Store session ID for mobile apps
+      // Store session ID in persistent storage (survives iOS app kills)
       if (user.sessionId) {
-        localStorage.setItem('sessionId', user.sessionId);
-        console.log('📱 Session ID stored in localStorage:', user.sessionId);
+        secureSet('sessionId', user.sessionId);
+        localStorage.setItem('sessionId', user.sessionId); // keep in sync for sync reads
       }
       
-      // Immediately set user data - no need to refetch since we already have fresh data
       queryClient.setQueryData(["/api/user"], user);
+      registerPushNotifications().catch(() => {});
       console.log('✅ Login successful, user data cached:', user.username);
     },
     onError: (error: Error) => {
@@ -123,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("/api/logout", { method: "POST" });
     },
     onSuccess: () => {
-      // Clear session ID for mobile apps
+      secureRemove('sessionId');
       localStorage.removeItem('sessionId');
       
       // Clear all cached data
@@ -139,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 500);
     },
     onError: (error: Error) => {
-      // Clear session ID for mobile apps
+      secureRemove('sessionId');
       localStorage.removeItem('sessionId');
       
       // Even if logout fails on server, clear local data

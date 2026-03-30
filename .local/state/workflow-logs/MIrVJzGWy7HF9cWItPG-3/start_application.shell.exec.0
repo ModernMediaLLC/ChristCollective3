@@ -1,0 +1,19 @@
+[1G[0K⠙[1G[0K
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K⠙[1G[0KEmail service initialized with Resend
+Apify API configured for live social media data extraction
+6:04:33 PM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 17 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+━━━━━ /api/user Request ━━━━━
+Session ID: dU0ZIGOHNuBOuvQLAQfALykcIvisy0Pk
+Has X-Session-ID header: [33mfalse[39m
+Has Cookie: [33mfalse[39m
+Authenticated: [33mfalse[39m
+❌ Not authenticated - returning 401
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+6:04:41 PM [express] GET /api/user 401 in 3ms
+6:04:41 PM [express] GET /api/statistics 200 in 103ms :: {"communityMembers":62,"donationsRaised":96…

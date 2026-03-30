@@ -519,9 +519,11 @@ export default function EditProfilePage() {
         console.log("Uploading profile image...");
         const formData = new FormData();
         formData.append('profileImage', selectedProfileImage);
-        
-        const uploadResponse = await fetch('/api/upload/profile-image', {
+
+        const uploadResponse = await fetch(buildApiUrl('/api/upload/profile-image'), {
           method: 'POST',
+          credentials: 'include',
+          headers: getMobileAuthHeaders(),
           body: formData,
         });
         
@@ -550,10 +552,12 @@ export default function EditProfilePage() {
       if (data.showPhone !== undefined) updatePayload.showPhone = !!data.showPhone;
       if (data.showLocation !== undefined) updatePayload.showLocation = !!data.showLocation;
 
-      const response = await fetch('/api/user/profile', {
+      const response = await fetch(buildApiUrl('/api/user/profile'), {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...getMobileAuthHeaders(),
         },
         body: JSON.stringify(updatePayload),
       });

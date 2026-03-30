@@ -1,0 +1,67 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0KEmail service initialized with Resend
+Apify API configured for live social media data extraction
+3:40:25 AM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 17 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+━━━━━ /api/user Request ━━━━━
+Session ID: 07D_rverw4vG0gyuNOECQXHG9phQseTz
+Has X-Session-ID header: [33mfalse[39m
+Has Cookie: [33mfalse[39m
+Authenticated: [33mfalse[39m
+❌ Not authenticated - returning 401
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+3:40:30 AM [express] GET /api/user 401 in 2ms
+3:40:30 AM [express] GET /api/statistics 200 in 107ms :: {"communityMembers":61,"donationsRaised":96…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m3:43:47 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/PostPage.tsx, /src/index.css?v=P0MfF1tcOsnfAvgaD8NvL[22m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m3:43:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/MinistryPostCard.tsx, /src/index.css?v=P0MfF1tcOsnfAvgaD8NvL[22m

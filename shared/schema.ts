@@ -1011,3 +1011,16 @@ export const userBlocks = pgTable("user_blocks", {
 export const insertUserBlockSchema = createInsertSchema(userBlocks).omit({ id: true, createdAt: true });
 export type UserBlock = typeof userBlocks.$inferSelect;
 export type InsertUserBlock = z.infer<typeof insertUserBlockSchema>;
+
+export const pushTokens = pgTable("push_tokens", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  platform: varchar("platform", { length: 10 }).notNull().default("ios"), // ios | android
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserToken: uniqueIndex("unique_push_token").on(table.userId, table.token),
+}));
+
+export type PushToken = typeof pushTokens.$inferSelect;

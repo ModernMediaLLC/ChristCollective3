@@ -80,6 +80,18 @@ export async function setupAuth(app: Express) {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")
     `);
+    // Push notification tokens table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "push_tokens" (
+        "id" serial PRIMARY KEY,
+        "user_id" varchar NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "token" text NOT NULL,
+        "platform" varchar(10) NOT NULL DEFAULT 'ios',
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE ("user_id", "token")
+      )
+    `);
   } catch (err) {
     console.error('Session table setup error:', err);
   }

@@ -37,6 +37,8 @@ import {
 } from "./security";
 import { uploadToSupabase } from "./supabaseStorage";
 import { moderateContent } from "./services/moderationService";
+import { sendPushToUser } from "./pushNotifications";
+import { pool } from "./db";
 
 const uploadBufferToObjectStorage = uploadToSupabase;
 
@@ -1056,6 +1058,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create notification for like
         await storage.createNotificationForLike(userId, postId, post.userId);
+        if (post.userId !== userId) {
+          const liker = await storage.getUser(userId);
+          sendPushToUser(post.userId, {
+            title: "New Like",
+            body: `${liker?.firstName || liker?.username || "Someone"} liked your post`,
+            data: { type: "like", postId: String(postId) },
+          }).catch(() => {});
+        }
 
         res.json({ liked: true, likesCount: (post.likesCount || 0) + 1 });
       }
@@ -1248,6 +1258,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await storage.createNotificationForComment(userId, postId, post.userId, content.trim());
+      if (post.userId !== userId) {
+        const commenter = await storage.getUser(userId);
+        sendPushToUser(post.userId, {
+          title: "New Comment",
+          body: `${commenter?.firstName || commenter?.username || "Someone"} commented: ${content.trim().slice(0, 80)}`,
+          data: { type: "comment", postId: String(postId) },
+        }).catch(() => {});
+      }
 
       res.status(201).json(comment);
     } catch (error) {
@@ -4213,6 +4231,12 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
       }
 
       const follow = await storage.followUser(followerId, targetUserId);
+      const follower = await storage.getUser(followerId);
+      sendPushToUser(targetUserId, {
+        title: "New Follower",
+        body: `${follower?.firstName || follower?.username || "Someone"} started following you`,
+        data: { type: "follow", userId: followerId },
+      }).catch(() => {});
       res.json({ message: "Successfully followed user", follow });
     } catch (error) {
       console.error("Error following user:", error);
@@ -5533,6 +5557,40 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     } catch (error) {
       console.error("Error updating product:", error);
       res.status(500).json({ message: "Failed to update product" });
+    }
+  });
+
+  // ── Push Token Registration ──────────────────────────────────────────────
+  app.post("/api/push-tokens", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { token, platform = "ios" } = req.body;
+      if (!token) return res.status(400).json({ message: "token required" });
+      await pool.query(
+        `INSERT INTO push_tokens (user_id, token, platform, updated_at)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (user_id, token) DO UPDATE SET updated_at = now()`,
+        [userId, token, platform]
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error registering push token:", error);
+      res.status(500).json({ message: "Failed to register push token" });
+    }
+  });
+
+  app.delete("/api/push-tokens", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { token } = req.body;
+      if (token) {
+        await pool.query(`DELETE FROM push_tokens WHERE user_id = $1 AND token = $2`, [userId, token]);
+      } else {
+        await pool.query(`DELETE FROM push_tokens WHERE user_id = $1`, [userId]);
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to remove push token" });
     }
   });
 
