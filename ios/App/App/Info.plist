@@ -53,5 +53,9 @@
         <string>Christ Collective needs permission to save photos to your library.</string>
         <key>NSMicrophoneUsageDescription</key>
         <string>Christ Collective uses the microphone when recording video for posts and creator content.</string>
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>remote-notification</string>
+        </array>
 </dict>
 </plist>
