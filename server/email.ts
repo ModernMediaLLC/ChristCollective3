@@ -15,9 +15,7 @@ export interface SendPasswordResetEmailParams {
 }
 
 export async function sendPasswordResetEmail({ to, resetToken, userName }: SendPasswordResetEmailParams) {
-  const baseUrl = process.env.REPLIT_DEPLOYMENT === '1' 
-    ? `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
-    : `http://localhost:5000`;
+  const baseUrl = process.env.APP_URL ?? 'https://christcollective.up.railway.app';
   
   // URL-encode the token to prevent issues with special characters
   const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
@@ -105,9 +103,7 @@ export async function sendOrderConfirmationEmail(params: OrderConfirmationEmailP
     }).format(amount / 100);
   };
 
-  const baseUrl = process.env.REPLIT_DEPLOYMENT === '1' 
-    ? `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
-    : `http://localhost:5000`;
+  const baseUrl = process.env.APP_URL ?? 'https://christcollective.up.railway.app';
 
   try {
     const { data, error } = await resend.emails.send({
