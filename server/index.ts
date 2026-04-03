@@ -4,6 +4,7 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { globalLimiter } from "./security";
+import { initPush } from "./pushNotifications";
 
 // Apify API key is configured via environment variables (TIKTOK_API_KEY)
 if (process.env.TIKTOK_API_KEY) {
@@ -141,5 +142,6 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
   }, () => {
     log(`serving on port ${port}`);
+    initPush();
   });
 })();

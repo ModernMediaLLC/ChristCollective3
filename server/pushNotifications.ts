@@ -108,6 +108,11 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   }
 }
 
+/** Initialize APNs at server startup so config issues appear in logs immediately */
+export async function initPush(): Promise<void> {
+  await getApnProvider();
+}
+
 /** Send the daily Word of the Day notification to all users with push tokens */
 export async function sendWordOfTheDayNotification(word: string, verse: string): Promise<void> {
   const provider = await getApnProvider();
