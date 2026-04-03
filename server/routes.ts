@@ -3681,6 +3681,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.status(201).json(post);
+
+      // Push notifications to all ministry followers
+      try {
+        const { sendPushToUser } = await import("./pushNotifications");
+        const followers = await pool.query(
+          `SELECT user_id FROM ministry_followers WHERE ministry_id = $1`,
+          [parseInt(id)]
+        );
+        const postTitle = postData.title || "New Post";
+        for (const row of followers.rows) {
+          if (row.user_id === userId) continue;
+          await sendPushToUser(row.user_id, {
+            title: `${ministry.name}`,
+            body: postTitle,
+            data: { type: "ministry_post", postId: String(post.id) },
+          });
+        }
+      } catch (e) {
+        console.error("[Push] Ministry post notification error:", e);
+      }
     } catch (error) {
       console.error("Error creating ministry post:", error);
       if (error instanceof z.ZodError) {
@@ -4789,6 +4809,24 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
       const newMessage = messages.find(m => m.id === message.id);
 
       res.json(newMessage);
+
+      // Push notifications to all group members except sender
+      try {
+        const { sendPushToUser } = await import("./pushNotifications");
+        const members = await storage.getChatMembers(chatId);
+        const senderName = newMessage?.user?.displayName || newMessage?.user?.firstName || newMessage?.user?.username || "Someone";
+        const chatTitle = newMessage?.chat?.title || "Group Chat";
+        for (const member of members) {
+          if (member.id === userId) continue;
+          await sendPushToUser(member.id, {
+            title: `${chatTitle}`,
+            body: `${senderName}: ${req.body.content?.slice(0, 100) || "Sent a message"}`,
+            data: { type: "group_chat", chatId: String(chatId) },
+          });
+        }
+      } catch (e) {
+        console.error("[Push] Group chat notification error:", e);
+      }
     } catch (error) {
       console.error("Error creating chat message:", error);
       res.status(500).json({ message: "Failed to create chat message" });
