@@ -84,15 +84,20 @@ export function NotificationsList() {
       await apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" });
     },
     onSuccess: invalidateNotifications,
-    onError: () => { /* silently ignore — non-critical */ },
+    onError: (err) => console.error("[Notifications] markAsRead failed:", err),
   });
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("/api/notifications/mark-all-read", { method: "PATCH" });
+      const res = await apiRequest("/api/notifications/mark-all-read", { method: "PATCH" });
+      if (!res.ok) throw new Error(`mark-all-read failed: ${res.status}`);
     },
-    onSuccess: invalidateNotifications,
-    onError: () => { /* silently ignore — non-critical */ },
+    onSuccess: () => {
+      // Immediately zero out the badge without waiting for refetch
+      queryClient.setQueryData(["/api/notifications/unread-count"], { count: 0 });
+      invalidateNotifications();
+    },
+    onError: (err) => console.error("[Notifications] markAllAsRead failed:", err),
   });
 
   const deleteNotificationMutation = useMutation({
@@ -103,13 +108,13 @@ export function NotificationsList() {
     onError: () => toast({ title: "Failed to delete notification", variant: "destructive" }),
   });
 
-  // Auto-mark all as read when the user opens the notifications view
+  // Auto-mark all as read when notifications panel opens
   useEffect(() => {
-    if (notifications.length > 0 && notifications.some((n) => !n.isRead)) {
+    if (notifications.some((n) => !n.isRead)) {
       markAllAsReadMutation.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notifications.length]);
+  }, [notifications.length, isLoading]);
 
   const createTestNotificationsMutation = useMutation({
     mutationFn: async () => {
