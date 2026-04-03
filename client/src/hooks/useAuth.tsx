@@ -75,9 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    gcTime: 10 * 60 * 1000, // Garbage collect after 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
+
+  // Register push token whenever the user is confirmed logged in
+  // (covers app-open with existing session, not just explicit login)
+  useEffect(() => {
+    if (user && isNativeApp()) {
+      registerPushNotifications().catch(() => {});
+    }
+  }, [user?.id]);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
