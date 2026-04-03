@@ -5572,10 +5572,28 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
          ON CONFLICT (user_id, token) DO UPDATE SET updated_at = now()`,
         [userId, token, platform]
       );
+      console.log(`[Push] Token registered for user ${userId} (${platform}): ${token.slice(0, 10)}...`);
       res.json({ ok: true });
     } catch (error) {
       console.error("Error registering push token:", error);
       res.status(500).json({ message: "Failed to register push token" });
+    }
+  });
+
+  // ── Test Push Notification (admin only) ──────────────────────────────────
+  app.post("/api/push-tokens/test", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { sendPushToUser } = await import("./pushNotifications");
+      await sendPushToUser(userId, {
+        title: "Test Notification",
+        body: "Push notifications are working!",
+        data: { type: "test" },
+      });
+      res.json({ ok: true, message: "Test notification sent — check Railway logs for details" });
+    } catch (error) {
+      console.error("Error sending test push:", error);
+      res.status(500).json({ message: "Failed to send test push" });
     }
   });
 

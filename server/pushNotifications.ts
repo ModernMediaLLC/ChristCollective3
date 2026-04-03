@@ -21,12 +21,20 @@ interface PushPayload {
 
 // Lazy-load apn so server starts even when env vars are missing
 let apnProvider: any = null;
+let apnProviderInitialized = false;
 
 async function getApnProvider() {
-  if (apnProvider) return apnProvider;
+  if (apnProviderInitialized) return apnProvider;
+  apnProviderInitialized = true;
 
   const { APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID, APNS_PRIVATE_KEY } = process.env;
   if (!APNS_KEY_ID || !APNS_TEAM_ID || !APNS_BUNDLE_ID || !APNS_PRIVATE_KEY) {
+    console.warn("[Push] APNs NOT configured — missing env vars:", {
+      APNS_KEY_ID: !!APNS_KEY_ID,
+      APNS_TEAM_ID: !!APNS_TEAM_ID,
+      APNS_BUNDLE_ID: !!APNS_BUNDLE_ID,
+      APNS_PRIVATE_KEY: !!APNS_PRIVATE_KEY,
+    });
     return null;
   }
 
@@ -40,6 +48,7 @@ async function getApnProvider() {
       },
       production: process.env.APNS_PRODUCTION === "true",
     });
+    console.log(`[Push] APNs provider initialized — mode: ${process.env.APNS_PRODUCTION === "true" ? "PRODUCTION" : "SANDBOX"}, bundle: ${APNS_BUNDLE_ID}`);
     return apnProvider;
   } catch (err) {
     console.error("[Push] Failed to initialize APNs provider:", err);
@@ -59,10 +68,18 @@ async function getTokensForUser(userId: string): Promise<string[]> {
 /** Send a push notification to a specific user */
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
   const provider = await getApnProvider();
-  if (!provider) return;
+  if (!provider) {
+    console.warn(`[Push] Skipping notification to ${userId} — APNs not configured`);
+    return;
+  }
 
   const tokens = await getTokensForUser(userId);
-  if (!tokens.length) return;
+  if (!tokens.length) {
+    console.log(`[Push] No tokens for user ${userId} — skipping`);
+    return;
+  }
+
+  console.log(`[Push] Sending "${payload.title}" to user ${userId} (${tokens.length} token(s))`);
 
   const apn = await import("@parse/node-apn");
   const notification = new apn.Notification();
@@ -77,11 +94,13 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       const result = await provider.send(notification, token);
       if (result.failed?.length) {
         const err = result.failed[0].error || result.failed[0].response;
-        console.error(`[Push] Failed to send to token ${token.slice(0, 10)}...:`, err);
-        // Remove invalid tokens
+        console.error(`[Push] Failed for token ${token.slice(0, 10)}...:`, err);
         if (err?.reason === "BadDeviceToken" || err?.reason === "Unregistered") {
           await pool.query(`DELETE FROM push_tokens WHERE token = $1`, [token]);
+          console.log(`[Push] Removed invalid token ${token.slice(0, 10)}...`);
         }
+      } else {
+        console.log(`[Push] Delivered to token ${token.slice(0, 10)}...`);
       }
     } catch (e) {
       console.error("[Push] Send error:", e);
@@ -96,6 +115,7 @@ export async function sendWordOfTheDayNotification(word: string, verse: string):
 
   const result = await pool.query(`SELECT DISTINCT user_id FROM push_tokens`);
   const userIds: string[] = result.rows.map((r: any) => r.user_id);
+  console.log(`[Push] Sending Word of the Day to ${userIds.length} user(s)`);
 
   for (const userId of userIds) {
     await sendPushToUser(userId, {
