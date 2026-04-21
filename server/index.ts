@@ -15,6 +15,14 @@ if (process.env.TIKTOK_API_KEY) {
 
 const app = express();
 
+// Redirect root domain to www
+app.use((req, res, next) => {
+  if (req.hostname === 'christcollective.com') {
+    return res.redirect(301, `https://www.christcollective.com${req.originalUrl}`);
+  }
+  next();
+});
+
 // CORS configuration for mobile app and external previews
 app.use(cors({
   origin: (origin, callback) => {
