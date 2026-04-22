@@ -15,9 +15,9 @@ if (process.env.TIKTOK_API_KEY) {
 
 const app = express();
 
-// Redirect root domain to www
+// Redirect root domain to www (GET requests only — don't redirect API calls)
 app.use((req, res, next) => {
-  if (req.hostname === 'christcollective.com') {
+  if (req.hostname === 'christcollective.com' && req.method === 'GET' && !req.path.startsWith('/api/')) {
     return res.redirect(301, `https://www.christcollective.com${req.originalUrl}`);
   }
   next();
