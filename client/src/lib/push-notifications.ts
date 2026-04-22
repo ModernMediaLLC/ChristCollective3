@@ -11,17 +11,18 @@ export async function registerPushNotifications(): Promise<void> {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
-    // Request permission
+    // Request permission first
     const permission = await PushNotifications.requestPermissions();
-    if (permission.receive !== "granted") return;
+    if (permission.receive !== "granted") {
+      console.warn("[Push] Permission not granted:", permission.receive);
+      return;
+    }
 
-    // Register with APNs/FCM
-    await PushNotifications.register();
-
-    // Handle successful registration — send token to our server
+    // Set up listeners BEFORE calling register()
     await PushNotifications.addListener("registration", async (token) => {
+      console.log("[Push] Device token received, sending to server...");
       try {
-        await fetch(buildApiUrl("/api/push-tokens"), {
+        const res = await fetch(buildApiUrl("/api/push-tokens"), {
           method: "POST",
           credentials: "include",
           headers: {
@@ -30,9 +31,18 @@ export async function registerPushNotifications(): Promise<void> {
           },
           body: JSON.stringify({ token: token.value, platform: "ios" }),
         });
+        if (res.ok) {
+          console.log("[Push] Token registered successfully");
+        } else {
+          console.error("[Push] Server rejected token:", res.status);
+        }
       } catch (e) {
         console.error("[Push] Failed to register token with server:", e);
       }
+    });
+
+    await PushNotifications.addListener("registrationError", (err) => {
+      console.error("[Push] Registration error:", err);
     });
 
     // Handle foreground notifications
@@ -51,6 +61,10 @@ export async function registerPushNotifications(): Promise<void> {
         window.location.href = "/feed";
       }
     });
+
+    // Register AFTER listeners are attached
+    await PushNotifications.register();
+
   } catch (e) {
     console.error("[Push] Setup failed:", e);
   }
