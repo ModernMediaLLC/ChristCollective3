@@ -144,20 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Profile image upload endpoint
-  app.post('/api/upload/profile-image', isAuthenticated, uploadLimiter, upload.single('profileImage'), async (req: any, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
-      const imageUrl = await uploadBufferToObjectStorage(req.file.buffer, req.file.mimetype, req.file.originalname);
-      res.json({ url: imageUrl });
-    } catch (error) {
-      console.error("Error uploading profile image:", error);
-      res.status(500).json({ message: "Failed to upload image" });
-    }
-  });
+  // Profile image upload endpoint (main handler is registered below with DB update)
 
   app.post('/api/upload/banner-image', isAuthenticated, uploadLimiter, upload.single('bannerImage'), async (req: any, res) => {
     try {
@@ -2778,7 +2765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // File upload routes
-  app.post('/api/upload/profile-image', isAuthenticated, uploadLimiter, upload.single('image'), async (req: any, res) => {
+  app.post('/api/upload/profile-image', isAuthenticated, uploadLimiter, upload.single('profileImage'), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'No image file provided' });
@@ -2787,9 +2774,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const imageUrl = await uploadBufferToObjectStorage(req.file.buffer, req.file.mimetype, req.file.originalname);
 
-      const updatedUser = await storage.updateUser(userId, { profileImageUrl: imageUrl });
+      await storage.updateUser(userId, { profileImageUrl: imageUrl });
 
-      res.json({ imageUrl, profileImageUrl: updatedUser.profileImageUrl });
+      res.json({ url: imageUrl });
     } catch (error) {
       console.error('Error uploading profile image:', error);
       res.status(500).json({ message: 'Failed to upload profile image' });

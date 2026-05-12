@@ -37,6 +37,8 @@ export default function Header() {
   const { data: unreadCount } = useQuery<{ count: number } | null>({
     queryKey: ["/api/notifications/unread-count"],
     enabled: !!user,
+    staleTime: 0,
+    refetchInterval: 30000,
   });
 
   const notificationCount = unreadCount?.count || 0;
