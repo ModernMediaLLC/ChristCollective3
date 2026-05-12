@@ -58,8 +58,7 @@ class EmailService {
 
   async sendPasswordResetEmail(to: string, resetToken: string, userName?: string): Promise<boolean> {
     try {
-      // Determine base URL - use APP_URL env var (set this on Railway/production)
-      const baseUrl = process.env.APP_URL || 'http://localhost:5000';
+      const baseUrl = process.env.APP_URL || 'https://www.christcollective.com';
       
       // URL-encode the token to prevent issues with special characters
       const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
@@ -146,11 +145,7 @@ class EmailService {
 
   async sendEmailVerification(to: string, verificationToken: string, userName?: string): Promise<boolean> {
     try {
-      let baseUrl = 'http://localhost:5000';
-      if (process.env.REPLIT_DOMAINS) {
-        const domain = process.env.REPLIT_DOMAINS.split(',')[0];
-        baseUrl = `https://${domain}`;
-      }
+      const baseUrl = process.env.APP_URL || 'https://www.christcollective.com';
 
       const verifyLink = `${baseUrl}/verify-email?token=${encodeURIComponent(verificationToken)}`;
 
