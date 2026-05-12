@@ -18,3 +18,4 @@ vite.config.ts.*
 
 # Note: android/ and ios/ are NOT ignored for Capacitor projects
 # They should be committed to git for Appflow buildsAuthKey_*.p8
+AuthKey_*.p8
