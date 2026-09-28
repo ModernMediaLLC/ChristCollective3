@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronLeft, Sparkles, CalendarClock, Coffee, Search } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
+import { trackMetaEvent } from "@/lib/metaPixel";
 const DISCIPLINES = ["Founder", "Music", "Film / Video", "Photography", "Design", "Illustration", "Writing", "Fashion", "Worship + Ministry Arts", "Content / Social", "Dance", "Other"];
 const WINDOWS = ["Weekday mornings", "Weekday afternoons", "Weekday evenings", "Saturday mornings", "Saturday afternoons", "Sunday afternoons", "Sunday evenings", "I'm flexible"];
 const ACTIVITIES = [{ v: "coffee", l: "Coffee ☕" }, { v: "hiking", l: "Hiking 🥾" }, { v: "run", l: "Running 🏃" }, { v: "book", l: "Book club 📚" }, { v: "open", l: "Open to anything ✨" }];
@@ -49,7 +50,7 @@ export default function JoinFoundingPage() {
       const username = base + Math.floor(1000 + Math.random() * 89999);
       try {
         const res: any = await registerMutation.mutateAsync({ username, email: form.email, password: form.password, firstName: form.firstName, phone: form.phone } as any);
-        if (res?.id) { setSaving(false); setPhase("city"); return; }
+        if (res?.id) { trackMetaEvent("CompleteRegistration"); setSaving(false); setPhase("city"); return; }
         if (res?.requiresLogin) { setSaving(false); toast({ title: "Account created", description: "Please sign in to continue." }); navigate("/auth?redirect=/join"); return; }
       } catch (e: any) {
         if (/username/i.test(e?.message || "") && attempt < 2) continue; // taken → retry new username
@@ -84,6 +85,8 @@ export default function JoinFoundingPage() {
         phone: form.phone || undefined,
         smsOptIn: form.smsOptIn,
       }});
+      // Lead = finished the funnel inside LA (the signup the ads optimize for); waitlisted = outside LA, not counted
+      if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activity || "open" });
       setPhase("done");
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
