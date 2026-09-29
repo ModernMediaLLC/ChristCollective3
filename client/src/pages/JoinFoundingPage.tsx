@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronLeft, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon, Camera } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
-import { trackMetaEvent } from "@/lib/metaPixel";
+import { trackMetaEvent, newMetaEventId } from "@/lib/metaPixel";
 const DISCIPLINES = ["Founder", "Music", "Film / Video", "Photography", "Design", "Illustration", "Writing", "Fashion", "Worship + Ministry Arts", "Content / Social", "Dance", "Other"];
 const MAX_DISCIPLINES = 3;
 // Availability = a days × time-of-day grid; each cell maps to a window label like "Weekday evenings" (what the Matching CRM shows).
@@ -158,8 +158,10 @@ export default function JoinFoundingPage() {
   const submit = async () => {
     if (preview) return setPhase("profile");
     setSaving(true);
+    const leadEventId = newMetaEventId();
     try {
       await apiRequest("/api/founding-signup", { method: "POST", data: {
+        leadEventId,
         city: form.waitlisted ? (form.otherCity || "") : form.city,
         waitlisted: form.waitlisted,
         birthdate: form.birthdate,
@@ -171,7 +173,7 @@ export default function JoinFoundingPage() {
         smsOptIn: form.smsOptIn,
       }});
       // Lead = finished the funnel inside LA (the signup the ads optimize for); waitlisted = outside LA, not counted
-      if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activities.join(",") || OPEN });
+      if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activities.join(",") || OPEN }, leadEventId);
       setPhase("profile");
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });

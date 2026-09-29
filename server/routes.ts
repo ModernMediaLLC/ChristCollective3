@@ -42,6 +42,7 @@ import { uploadToSupabase } from "./supabaseStorage";
 import { moderateContent } from "./services/moderationService";
 import { sendPushToUser } from "./pushNotifications";
 import { pool } from "./db";
+import { sendMetaEvent } from "./metaCapi";
 
 // Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
@@ -343,6 +344,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activities: update.matchupRequest.activities,
         smsOptIn: consented,
       }).catch((e) => console.error("[founding-signup] notify email failed:", e?.message || e));
+      // Server-side Lead for Meta (LA signups only, matching the browser pixel); same event_id → Meta de-duplicates
+      if (!waitlisted) {
+        sendMetaEvent({
+          eventName: "Lead",
+          eventId: typeof b.leadEventId === "string" ? b.leadEventId.slice(0, 64) : undefined,
+          req,
+          sourceUrl: "https://www.christcollective.com/join",
+          user: {
+            id: req.user.id, email: me?.email, phone: update.phone || me?.phone, firstName: me?.firstName, lastName: me?.lastName,
+            city: update.city, birthdate: update.birthdate || (me as any)?.birthdate,
+          },
+          customData: { content_category: update.matchupRequest.activities.join(",") },
+        }).catch((e) => console.error("[founding-signup] Meta CAPI failed:", e?.message || e));
+      }
     } catch (error) {
       console.error("Error in founding signup:", error);
       res.status(500).json({ message: "Failed to save your signup" });

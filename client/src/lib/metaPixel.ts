@@ -31,7 +31,11 @@ export function initMetaPixel() {
   window.fbq("track", "PageView");
 }
 
-export function trackMetaEvent(event: string, params?: Record<string, unknown>) {
+// eventId lets Meta de-duplicate this browser event against the server-side (Conversions API) copy
+export function trackMetaEvent(event: string, params?: Record<string, unknown>, eventId?: string) {
   if (!loaded || !window.fbq) return;
-  window.fbq("track", event, params);
+  window.fbq("track", event, params, eventId ? { eventID: eventId } : undefined);
 }
+
+export const newMetaEventId = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
