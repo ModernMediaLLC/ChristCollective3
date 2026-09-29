@@ -7,7 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Check, ChevronLeft, Sparkles, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon } from "lucide-react";
+import { Check, ChevronLeft, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
 import { trackMetaEvent } from "@/lib/metaPixel";
 const DISCIPLINES = ["Founder", "Music", "Film / Video", "Photography", "Design", "Illustration", "Writing", "Fashion", "Worship + Ministry Arts", "Content / Social", "Dance", "Other"];
@@ -176,10 +176,13 @@ export default function JoinFoundingPage() {
       <div className="flex-1 px-5 py-6 max-w-md w-full mx-auto">
         {phase === "intro" && (
           <div>
-            <div className="w-12 h-12 rounded-2xl bg-[#D4AF37] flex items-center justify-center mb-5"><Sparkles className="w-6 h-6 text-black" /></div>
+            <img src="/brand/christ-collective-logo.png" alt="Christ Collective" className="h-12 w-auto mb-7" />
             <h1 className="text-3xl font-extrabold tracking-tight mb-3">Be a founding member</h1>
+            <p className="text-white text-[15px] leading-relaxed mb-3">
+              Christ Collective is a community where Christian creatives and founders connect, create and grow in faith together.
+            </p>
             <p className="text-gray-300 text-[15px] leading-relaxed mb-3">
-              Christ Collective is building small circles of Christian creatives who actually meet up — coffee, hikes, runs, book nights. We're gathering our first group in LA right now.
+              We're starting by building <span className="text-[#D4AF37] font-semibold">small circles of 6–8</span> who actually meet up — over coffee, on a hike, on a run. Our first circles are forming in LA right now.
             </p>
             <p className="text-gray-400 text-[14px] leading-relaxed">
               We're <span className="text-white font-medium">not matching people into circles just yet</span> — we want to build the group first. Tell us who you are and when you're generally free, and we'll bring you in as soon as there are enough people near you.
