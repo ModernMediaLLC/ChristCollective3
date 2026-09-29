@@ -200,8 +200,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof b.phone === "string" && b.phone) update.phone = b.phone;
       if (typeof b.smsOptIn === "boolean") update.smsOptIn = b.smsOptIn;
       const availability = Array.isArray(b.availability) ? b.availability.slice(0, 3).map(String) : [];
+      // Up to 3 activity picks; the first is the primary one the CRM auto-groups on
+      const activities: string[] = Array.isArray(b.activities) ? b.activities.slice(0, 3).map(String).filter(Boolean)
+        : typeof b.activity === "string" && b.activity ? [b.activity] : [];
       update.matchupRequest = {
-        activity: typeof b.activity === "string" && b.activity ? b.activity : "open",
+        activity: activities[0] || "open",
+        activities: activities.length ? activities : ["open"],
         slot: availability.join(", "),
         availability,
         general: true,

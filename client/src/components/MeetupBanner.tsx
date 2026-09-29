@@ -10,6 +10,7 @@ import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check } from "lucid
 
 const ACTIVITY_LABEL: Record<string, string> = {
   coffee: "Coffee", hiking: "Hiking", hike: "Hiking", run: "Run", running: "Run", book: "Book Club",
+  create: "Create Together", serve: "Serve Together", open: "Meetup",
 };
 const prettyActivity = (a?: string | null) => (a ? (ACTIVITY_LABEL[a.toLowerCase()] || a.charAt(0).toUpperCase() + a.slice(1)) : "Meetup");
 const memberName = (m: any) => m?.displayName || [m?.firstName, m?.lastName].filter(Boolean).join(" ") || m?.username || "Member";

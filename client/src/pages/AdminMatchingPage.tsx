@@ -145,7 +145,9 @@ function LeadCard({ lead, circles, onAssign }: { lead: any; circles: any[]; onAs
       </div>
       {(mr.activity || mr.slot) && (
         <div className="flex flex-wrap gap-1 mt-2">
-          {mr.activity && <Badge className="bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[10px]">{mr.activity}</Badge>}
+          {(Array.isArray(mr.activities) && mr.activities.length ? mr.activities : mr.activity ? [mr.activity] : []).map((a: string) => (
+            <Badge key={a} className="bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[10px]">{a}</Badge>
+          ))}
           {mr.slot && <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-400">{mr.slot}</Badge>}
         </div>
       )}

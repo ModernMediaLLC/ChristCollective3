@@ -19,12 +19,15 @@ const MAX_WINDOWS = 3;
 const FLEXIBLE = "I'm flexible";
 const windowLabel = (day: string, time: string) => `${day} ${time}s`;
 const ACTIVITIES = [
-  { v: "coffee", l: "Coffee", img: "/activities/coffee.jpg" },
-  { v: "hiking", l: "Hiking", img: "/activities/hiking.jpg" },
-  { v: "run", l: "Running", img: "/activities/run.jpg" },
-  { v: "book", l: "Book club", img: "/activities/book.jpg" },
-  { v: "open", l: "Open to anything", img: "/activities/open.jpg" },
+  { v: "coffee", l: "Coffee", sub: "", img: "/activities/coffee.jpg" },
+  { v: "hiking", l: "Hiking", sub: "", img: "/activities/hiking.jpg" },
+  { v: "run", l: "Running", sub: "", img: "/activities/run.jpg" },
+  { v: "create", l: "Create Together", sub: "Bring what you're working on", img: "/activities/create.jpg" },
+  { v: "serve", l: "Serve Together", sub: "Volunteer as a circle", img: "/activities/serve.jpg" },
+  { v: "open", l: "Open to anything", sub: "", img: "/activities/open.jpg" },
 ];
+const MAX_ACTIVITIES = 3;
+const OPEN = "open";
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // apiRequest errors look like `400: {"message":"..."}` — pull out just the message
@@ -62,13 +65,14 @@ export default function JoinFoundingPage() {
     firstName: "", email: "", phone: "", password: "", smsOptIn: (user as any)?.smsOptIn === true,
     birthdate: ((user as any)?.birthdate as string | undefined)?.slice(0, 10) || "",
     city: "", waitlisted: false, otherCity: "",
-    disciplines: [] as string[], availability: [] as string[], activity: "",
+    disciplines: [] as string[], availability: [] as string[], activities: [] as string[],
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-  // Toggle a multi-select value, ignoring new picks once `max` is reached
-  const toggle = (k: "disciplines" | "availability", v: string, max: number) =>
+  // Toggle a multi-select value, ignoring new picks once `max` is reached.
+  // "I'm flexible" / "Open to anything" are exclusive: picking a specific option clears them.
+  const toggle = (k: "disciplines" | "availability" | "activities", v: string, max: number) =>
     setForm((f) => {
-      const cur = k === "availability" ? f[k].filter((x) => x !== FLEXIBLE) : f[k];
+      const cur = f[k].filter((x) => x !== FLEXIBLE && x !== OPEN);
       if (cur.includes(v)) return { ...f, [k]: cur.filter((x) => x !== v) };
       return cur.length >= max ? f : { ...f, [k]: [...cur, v] };
     });
@@ -128,13 +132,13 @@ export default function JoinFoundingPage() {
         birthdate: form.birthdate,
         disciplines: form.disciplines,
         availability: form.availability,
-        activity: form.activity || "open",
+        activities: form.activities,
         matchPreference: "open",
         phone: form.phone || undefined,
         smsOptIn: form.smsOptIn,
       }});
       // Lead = finished the funnel inside LA (the signup the ads optimize for); waitlisted = outside LA, not counted
-      if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activity || "open" });
+      if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activities.join(",") || OPEN });
       setPhase("done");
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
@@ -153,7 +157,7 @@ export default function JoinFoundingPage() {
     phase === "city" ? (!!form.city || (form.waitlisted && form.otherCity.trim().length > 0)) :
     phase === "disciplines" ? true :
     phase === "availability" ? form.availability.length > 0 :
-    phase === "activity" ? !!form.activity && form.smsOptIn : true;
+    phase === "activity" ? form.activities.length > 0 && form.smsOptIn : true;
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
@@ -285,11 +289,20 @@ export default function JoinFoundingPage() {
         {phase === "activity" && (
           <div>
             <div className="flex items-center gap-2 mb-1"><Coffee className="w-5 h-5 text-[#D4AF37]" /><h1 className="text-2xl font-extrabold tracking-tight">What sounds fun?</h1></div>
-            <p className="text-gray-400 text-sm mb-5">How would you like to meet your circle?</p>
+            <p className="text-gray-400 text-sm mb-5">
+              Pick up to {MAX_ACTIVITIES} ways you'd like to meet your circle. <span className="text-[#D4AF37] font-medium">{form.activities.filter((a) => a !== OPEN).length}/{MAX_ACTIVITIES}</span>
+            </p>
             <div className="grid grid-cols-2 gap-2.5">
-              {ACTIVITIES.map((a, i) => (
-                <ActivityCard key={a.v} label={a.l} img={a.img} on={form.activity === a.v} onClick={() => set("activity", a.v)} wide={i === ACTIVITIES.length - 1} />
-              ))}
+              {ACTIVITIES.map((a) => {
+                const on = form.activities.includes(a.v);
+                const full = !on && a.v !== OPEN && form.activities.filter((x) => x !== OPEN).length >= MAX_ACTIVITIES;
+                return (
+                  <ActivityCard
+                    key={a.v} label={a.l} sub={a.sub} img={a.img} on={on} disabled={full}
+                    onClick={() => a.v === OPEN ? set("activities", on ? [] : [OPEN]) : toggle("activities", a.v, MAX_ACTIVITIES)}
+                  />
+                );
+              })}
             </div>
             <label className={cn("flex items-start gap-3 mt-5 p-3 rounded-xl border cursor-pointer transition-colors", form.smsOptIn ? "border-[#D4AF37]/40 bg-[#D4AF37]/[0.04]" : "border-gray-700")} onClick={() => set("smsOptIn", !form.smsOptIn)}>
               <span className={cn("w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 mt-0.5", form.smsOptIn ? "bg-[#D4AF37] border-[#D4AF37]" : "border-gray-500")}>
@@ -466,15 +479,19 @@ function AvailabilityGrid({ selected, onToggle }: { selected: string[]; onToggle
   );
 }
 
-function ActivityCard({ label, img, on, onClick, wide }: { label: string; img: string; on: boolean; onClick: () => void; wide?: boolean }) {
+function ActivityCard({ label, sub, img, on, disabled, onClick }: { label: string; sub?: string; img: string; on: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={cn("relative overflow-hidden rounded-2xl border-2 text-left transition-all", wide ? "col-span-2 h-24" : "h-32", on ? "border-[#D4AF37] shadow-[0_0_0_3px_rgba(212,175,55,0.25)]" : "border-transparent")}
+      disabled={disabled}
+      className={cn("relative h-32 overflow-hidden rounded-2xl border-2 text-left transition-all", on ? "border-[#D4AF37] shadow-[0_0_0_3px_rgba(212,175,55,0.25)]" : "border-transparent", disabled && "opacity-35 cursor-not-allowed")}
     >
       <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="eager" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-      <span className="absolute left-3 bottom-2.5 text-white text-[15px] font-bold drop-shadow">{label}</span>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
+      <span className="absolute left-3 right-3 bottom-2.5 drop-shadow">
+        <span className="block text-white text-[15px] font-bold leading-tight">{label}</span>
+        {sub && <span className="block text-[11px] text-gray-300 leading-tight mt-0.5">{sub}</span>}
+      </span>
       <span className={cn("absolute top-2.5 right-2.5 w-6 h-6 rounded-full border-2 flex items-center justify-center", on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-white/70 bg-black/30")}>
         {on && <Check className="w-3.5 h-3.5 text-black" />}
       </span>
