@@ -4,10 +4,11 @@ import { Helmet } from "react-helmet";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { buildApiUrl, getMobileAuthHeaders } from "@/lib/api-config";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Check, ChevronLeft, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon } from "lucide-react";
+import { Check, ChevronLeft, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon, Camera } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
 import { trackMetaEvent } from "@/lib/metaPixel";
 const DISCIPLINES = ["Founder", "Music", "Film / Video", "Photography", "Design", "Illustration", "Writing", "Fashion", "Worship + Ministry Arts", "Content / Social", "Dance", "Other"];
@@ -47,7 +48,8 @@ function ageFrom(iso: string): number | null {
   return age;
 }
 
-const ORDER = ["intro", "register", "birthday", "city", "disciplines", "availability", "activity", "done"] as const;
+const ORDER = ["intro", "register", "birthday", "city", "disciplines", "availability", "activity", "profile", "done"] as const;
+const BIO_MAX = 160;
 type Phase = (typeof ORDER)[number];
 
 export default function JoinFoundingPage() {
@@ -122,8 +124,38 @@ export default function JoinFoundingPage() {
     } finally { setSaving(false); }
   };
 
+  // Optional profile step (after the signup is already saved): photo, short bio, Instagram
+  const [profile, setProfile] = useState({ photo: null as File | null, photoUrl: "", bio: "", instagram: "" });
+  const profileTouched = !!profile.photo || !!profile.bio.trim() || !!profile.instagram.trim();
+  const pickPhoto = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast({ title: "Please choose an image", variant: "destructive" });
+    setProfile((p) => ({ ...p, photo: file, photoUrl: URL.createObjectURL(file) }));
+  };
+  const saveProfile = async () => {
+    if (preview || !profileTouched) return setPhase("done");
+    setSaving(true);
+    try {
+      if (profile.photo) {
+        const fd = new FormData();
+        fd.append("profileImage", profile.photo);
+        const r = await fetch(buildApiUrl("/api/upload/profile-image"), { method: "POST", credentials: "include", headers: getMobileAuthHeaders(), body: fd });
+        if (!r.ok) throw new Error("Couldn't upload your photo — try a smaller image.");
+      }
+      if (profile.bio.trim() || profile.instagram.trim()) {
+        await apiRequest("/api/user/profile", { method: "PUT", data: {
+          ...(profile.bio.trim() && { bio: profile.bio.trim() }),
+          ...(profile.instagram.trim() && { instagram: profile.instagram.trim() }),
+        }});
+      }
+      setPhase("done");
+    } catch (e: any) {
+      toast({ title: "Couldn't save your profile", description: readableError(e?.message) || "Try again, or skip for now.", variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
   const submit = async () => {
-    if (preview) return setPhase("done");
+    if (preview) return setPhase("profile");
     setSaving(true);
     try {
       await apiRequest("/api/founding-signup", { method: "POST", data: {
@@ -139,7 +171,7 @@ export default function JoinFoundingPage() {
       }});
       // Lead = finished the funnel inside LA (the signup the ads optimize for); waitlisted = outside LA, not counted
       if (!form.waitlisted) trackMetaEvent("Lead", { content_category: form.activities.join(",") || OPEN });
-      setPhase("done");
+      setPhase("profile");
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally { setSaving(false); }
@@ -168,7 +200,7 @@ export default function JoinFoundingPage() {
 
       {phase !== "done" && (
         <div className="px-5 pt-6 pb-2">
-          {phase !== "intro" ? (
+          {phase !== "intro" && phase !== "profile" ? (
             <button onClick={back} className="text-gray-400 hover:text-white flex items-center gap-1 text-sm mb-4"><ChevronLeft className="w-4 h-4" /> Back</button>
           ) : <div className="h-9" />}
           <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
@@ -315,6 +347,43 @@ export default function JoinFoundingPage() {
           </div>
         )}
 
+        {phase === "profile" && (
+          <div>
+            <p className="text-[#D4AF37] text-xs font-bold uppercase tracking-widest mb-2">✓ You're in — one last touch</p>
+            <h1 className="text-2xl font-extrabold tracking-tight mb-1">Let your circle know you</h1>
+            <p className="text-gray-400 text-sm mb-6">People feel more comfortable meeting someone they can recognize. Add a photo and a line about yourself — you can change it anytime.</p>
+
+            <label className="flex items-center gap-4 mb-6 cursor-pointer group">
+              <span className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-dashed border-gray-700 group-hover:border-[#D4AF37] flex items-center justify-center bg-[#0A0A0A] flex-shrink-0">
+                {profile.photoUrl
+                  ? <img src={profile.photoUrl} alt="" className="w-full h-full object-cover" />
+                  : <Camera className="w-7 h-7 text-gray-500 group-hover:text-[#D4AF37]" />}
+              </span>
+              <span>
+                <span className="block text-white font-semibold text-[15px]">{profile.photoUrl ? "Change photo" : "Add a profile photo"}</span>
+                <span className="block text-gray-500 text-xs mt-0.5">A clear photo of your face works best</span>
+              </span>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+            </label>
+
+            <label className="block text-sm font-semibold text-gray-200 mb-1.5">Short bio</label>
+            <textarea
+              value={profile.bio}
+              onChange={(e) => setProfile((p) => ({ ...p, bio: e.target.value.slice(0, BIO_MAX) }))}
+              rows={3}
+              placeholder="e.g. Filmmaker in Silver Lake. Coffee snob, Psalm 23 guy, always down for a sunrise hike."
+              className="w-full rounded-md bg-[#0A0A0A] border border-gray-800 text-white text-[15px] p-3 placeholder:text-gray-600 focus:outline-none focus:border-[#D4AF37] resize-none"
+            />
+            <p className="text-right text-[11px] text-gray-600 mb-4">{profile.bio.length}/{BIO_MAX}</p>
+
+            <label className="block text-sm font-semibold text-gray-200 mb-1.5">Instagram <span className="text-gray-500 font-normal">(optional)</span></label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">@</span>
+              <Input value={profile.instagram} onChange={(e) => setProfile((p) => ({ ...p, instagram: e.target.value.replace(/^@/, "") }))} placeholder="yourhandle" autoCapitalize="none" className="bg-[#0A0A0A] border-gray-800 text-white h-12 pl-8" />
+            </div>
+          </div>
+        )}
+
         {phase === "done" && (
           <div className="text-center py-10">
             <div className="w-16 h-16 rounded-2xl bg-[#D4AF37] mx-auto mb-5 flex items-center justify-center"><Check className="w-8 h-8 text-black" /></div>
@@ -345,12 +414,13 @@ export default function JoinFoundingPage() {
               onClick={() => {
                 if (phase === "register") return authMode === "login" ? doLogin() : doRegister();
                 if (phase === "activity") return submit();
+                if (phase === "profile") return saveProfile();
                 next();
               }}
               disabled={!canNext || saving}
               className="w-full h-12 bg-[#D4AF37] hover:bg-[#C4A030] text-black font-bold disabled:opacity-40"
             >
-              {saving ? (phase === "register" && authMode === "login" ? "Logging in…" : "Saving…") : phase === "intro" ? "Get started" : phase === "register" && authMode === "login" ? "Log in & continue" : phase === "activity" ? "Join the founding group" : phase === "disciplines" && form.disciplines.length === 0 ? "Skip" : "Continue"}
+              {saving ? (phase === "register" && authMode === "login" ? "Logging in…" : "Saving…") : phase === "intro" ? "Get started" : phase === "register" && authMode === "login" ? "Log in & continue" : phase === "activity" ? "Join the founding group" : phase === "profile" ? (profileTouched ? "Save & finish" : "Skip for now") : phase === "disciplines" && form.disciplines.length === 0 ? "Skip" : "Continue"}
             </Button>
           </div>
         </div>

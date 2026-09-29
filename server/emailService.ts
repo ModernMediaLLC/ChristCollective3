@@ -226,6 +226,54 @@ class EmailService {
     }
   }
 
+  // Team alert for every completed /join signup. Recipient: SIGNUP_NOTIFY_EMAIL, else the Christ Collective inbox.
+  async sendNewSignupNotification(s: {
+    name: string; email: string; phone: string; birthdate: string | null; city: string; waitlisted: boolean;
+    disciplines: string[]; availability: string[]; activities: string[]; smsOptIn: boolean;
+  }): Promise<boolean> {
+    const to = process.env.SIGNUP_NOTIFY_EMAIL || 'christcollective369@gmail.com';
+    const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    const list = (a: string[]) => (a.length ? a.map(esc).join(', ') : '—');
+    let age = '';
+    if (s.birthdate) {
+      const [y, m, d] = String(s.birthdate).slice(0, 10).split('-').map(Number);
+      const now = new Date();
+      age = String(now.getFullYear() - y - (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d) ? 1 : 0));
+    }
+    const where = s.waitlisted ? `Waitlist (outside LA): ${esc(s.city)}` : esc(s.city);
+    const rows: [string, string][] = [
+      ['Name', esc(s.name)], ['Email', esc(s.email)], ['Phone', esc(s.phone)],
+      ['Age', age ? `${age} (born ${esc(String(s.birthdate).slice(0, 10))})` : '—'], ['City', where],
+      ['Creates', list(s.disciplines)], ['Free', list(s.availability)], ['Activities', list(s.activities)],
+      ['SMS consent', s.smsOptIn ? 'Yes' : 'No'],
+    ];
+    const subject = `${s.waitlisted ? '🕓 Waitlist' : '🎉 New LA member'}: ${s.name}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#222">
+        <div style="background:#000;color:#D4AF37;padding:16px 20px;font-weight:bold;font-size:18px">${esc(subject)}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          ${rows.map(([k, v]) => `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#666;width:120px">${k}</td><td style="padding:8px 12px;border-bottom:1px solid #eee">${v}</td></tr>`).join('')}
+        </table>
+        <p style="font-size:13px;color:#666;padding:12px">Open the <a href="https://www.christcollective.com/admin/matching">Matching CRM</a> to group them into a circle.</p>
+      </div>`;
+    const text = rows.map(([k, v]) => `${k}: ${v.replace(/<[^>]+>/g, '')}`).join('\n');
+    try {
+      if (this.useResend && this.resend) {
+        const { error } = await this.resend.emails.send({
+          from: 'Christ Collective <contact@christcollective.info>', to: [to], subject, html, text,
+        });
+        if (error) { console.error('Signup notification via Resend failed:', error); return false; }
+        return true;
+      }
+      if (!this.transporter) return false;
+      await this.transporter.sendMail({ from: '"Christ Collective" <contact@christcollective.info>', to, subject, html, text });
+      return true;
+    } catch (error) {
+      console.error('Failed to send signup notification:', error);
+      return false;
+    }
+  }
+
   async sendDonationConfirmation(data: DonationEmailData): Promise<boolean> {
     try {
       const html = this.generateDonationReceiptHTML(data);

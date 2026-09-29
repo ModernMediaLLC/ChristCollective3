@@ -108,6 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         location,
         phone,
         profileImageUrl,
+        instagram,
         showEmail,
         showPhone,
         showLocation
@@ -122,6 +123,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (location !== undefined) updateData.location = location;
       if (phone !== undefined) updateData.phone = phone;
       if (profileImageUrl !== undefined) updateData.profileImageUrl = profileImageUrl;
+      if (instagram !== undefined) {
+        // Accept "@handle", "handle" or an instagram.com URL; store the bare handle
+        const handle = String(instagram).trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").replace(/[/?#].*$/, "");
+        if (handle && !/^[A-Za-z0-9._]{1,30}$/.test(handle)) return res.status(400).json({ message: "That doesn't look like an Instagram handle", field: "instagram" });
+        updateData.instagram = handle || null;
+      }
       if (showEmail !== undefined) updateData.showEmail = typeof showEmail === 'boolean' ? showEmail : showEmail === 'true';
       if (showPhone !== undefined) updateData.showPhone = typeof showPhone === 'boolean' ? showPhone : showPhone === 'true';
       if (showLocation !== undefined) updateData.showLocation = typeof showLocation === 'boolean' ? showLocation : showLocation === 'true';
@@ -214,6 +221,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       await storage.updateUser(req.user.id, update);
       res.json({ ok: true, waitlisted });
+      // Fire-and-forget new-signup alert to the team inbox (never blocks or fails the signup)
+      emailService.sendNewSignupNotification({
+        name: [me?.firstName, me?.lastName].filter(Boolean).join(" ") || me?.username || "—",
+        email: me?.email || "—",
+        phone: update.phone || me?.phone || "—",
+        birthdate: update.birthdate || (me as any)?.birthdate || null,
+        city: update.city || "—",
+        waitlisted,
+        disciplines: update.disciplines || [],
+        availability,
+        activities: update.matchupRequest.activities,
+        smsOptIn: consented,
+      }).catch((e) => console.error("[founding-signup] notify email failed:", e?.message || e));
     } catch (error) {
       console.error("Error in founding signup:", error);
       res.status(500).json({ message: "Failed to save your signup" });
@@ -2718,7 +2738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const users = await storage.getUsersCount();
 
       // Zeffy total — update this manually when syncing from Zeffy dashboard
-      const ZEFFY_DONATIONS_RAISED = 964;
+      const ZEFFY_DONATIONS_RAISED = 2561;
       const totalDonations = ZEFFY_DONATIONS_RAISED;
 
       // Get unique industries from business profiles
