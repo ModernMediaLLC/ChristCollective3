@@ -13,7 +13,8 @@ declare global {
 let loaded = false;
 
 export function initMetaPixel() {
-  if (loaded || !META_PIXEL_ID || !isWeb()) return;
+  // ?preview=1 is the internal walkthrough of /join — keep it out of Meta's data
+  if (loaded || !META_PIXEL_ID || !isWeb() || new URLSearchParams(window.location.search).has("preview")) return;
   loaded = true;
   // Standard Meta base snippet
   const n: any = (window.fbq = function (...args: any[]) {

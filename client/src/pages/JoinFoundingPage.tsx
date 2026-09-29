@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,33 +7,72 @@ import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Check, ChevronLeft, Sparkles, CalendarClock, Coffee, Search } from "lucide-react";
+import { Check, ChevronLeft, Sparkles, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
 import { trackMetaEvent } from "@/lib/metaPixel";
 const DISCIPLINES = ["Founder", "Music", "Film / Video", "Photography", "Design", "Illustration", "Writing", "Fashion", "Worship + Ministry Arts", "Content / Social", "Dance", "Other"];
-const WINDOWS = ["Weekday mornings", "Weekday afternoons", "Weekday evenings", "Saturday mornings", "Saturday afternoons", "Sunday afternoons", "Sunday evenings", "I'm flexible"];
-const ACTIVITIES = [{ v: "coffee", l: "Coffee ☕" }, { v: "hiking", l: "Hiking 🥾" }, { v: "run", l: "Running 🏃" }, { v: "book", l: "Book club 📚" }, { v: "open", l: "Open to anything ✨" }];
+const MAX_DISCIPLINES = 3;
+// Availability = a days × time-of-day grid; each cell maps to a window label like "Weekday evenings" (what the Matching CRM shows).
+const DAYS = [{ v: "Weekday", l: "Weekdays" }, { v: "Saturday", l: "Sat" }, { v: "Sunday", l: "Sun" }];
+const TIMES = [{ v: "morning", l: "Morning", Icon: Sunrise }, { v: "afternoon", l: "Afternoon", Icon: Sun }, { v: "evening", l: "Evening", Icon: Moon }];
+const MAX_WINDOWS = 3;
+const FLEXIBLE = "I'm flexible";
+const windowLabel = (day: string, time: string) => `${day} ${time}s`;
+const ACTIVITIES = [
+  { v: "coffee", l: "Coffee", img: "/activities/coffee.jpg" },
+  { v: "hiking", l: "Hiking", img: "/activities/hiking.jpg" },
+  { v: "run", l: "Running", img: "/activities/run.jpg" },
+  { v: "book", l: "Book club", img: "/activities/book.jpg" },
+  { v: "open", l: "Open to anything", img: "/activities/open.jpg" },
+];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const ORDER = ["intro", "register", "city", "disciplines", "availability", "activity", "done"] as const;
+// apiRequest errors look like `400: {"message":"..."}` — pull out just the message
+function readableError(raw?: string): string {
+  const body = (raw || "").replace(/^\d{3}:\s*/, "");
+  try { return JSON.parse(body).message || body; } catch { return body; }
+}
+
+// Age in whole years from a YYYY-MM-DD string (null if incomplete/invalid)
+function ageFrom(iso: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  if (now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d)) age--;
+  return age;
+}
+
+const ORDER = ["intro", "register", "birthday", "city", "disciplines", "availability", "activity", "done"] as const;
 type Phase = (typeof ORDER)[number];
 
 export default function JoinFoundingPage() {
   const { user, registerMutation, loginMutation } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  // ?preview=1 → walk the whole funnel without creating an account, saving anything, or firing pixel events
+  const preview = new URLSearchParams(window.location.search).has("preview");
   const loggedIn = !!user?.id;
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [authMode, setAuthMode] = useState<"register" | "login">("register");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    firstName: "", email: "", phone: "", password: "", smsOptIn: false,
+    firstName: "", email: "", phone: "", password: "", smsOptIn: (user as any)?.smsOptIn === true,
+    birthdate: ((user as any)?.birthdate as string | undefined)?.slice(0, 10) || "",
     city: "", waitlisted: false, otherCity: "",
     disciplines: [] as string[], availability: [] as string[], activity: "",
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const toggle = (k: "disciplines" | "availability", v: string) =>
-    setForm((f) => ({ ...f, [k]: f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v] }));
+  // Toggle a multi-select value, ignoring new picks once `max` is reached
+  const toggle = (k: "disciplines" | "availability", v: string, max: number) =>
+    setForm((f) => {
+      const cur = k === "availability" ? f[k].filter((x) => x !== FLEXIBLE) : f[k];
+      if (cur.includes(v)) return { ...f, [k]: cur.filter((x) => x !== v) };
+      return cur.length >= max ? f : { ...f, [k]: [...cur, v] };
+    });
+  const age = ageFrom(form.birthdate);
 
   const advance = (p: Phase, dir: 1 | -1 = 1) => {
     let i = ORDER.indexOf(p) + dir;
@@ -44,18 +83,24 @@ export default function JoinFoundingPage() {
   const back = () => setPhase((p) => advance(p, -1));
 
   const doRegister = async () => {
+    if (preview) return setPhase("birthday");
     setSaving(true);
     const base = (form.firstName || form.email.split("@")[0] || "member").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || "member";
     for (let attempt = 0; attempt < 3; attempt++) {
       const username = base + Math.floor(1000 + Math.random() * 89999);
       try {
         const res: any = await registerMutation.mutateAsync({ username, email: form.email, password: form.password, firstName: form.firstName, phone: form.phone } as any);
-        if (res?.id) { trackMetaEvent("CompleteRegistration"); setSaving(false); setPhase("city"); return; }
+        if (res?.id) { trackMetaEvent("CompleteRegistration"); setSaving(false); setPhase("birthday"); return; }
         if (res?.requiresLogin) { setSaving(false); toast({ title: "Account created", description: "Please sign in to continue." }); navigate("/auth?redirect=/join"); return; }
       } catch (e: any) {
         if (/username/i.test(e?.message || "") && attempt < 2) continue; // taken → retry new username
         setSaving(false);
-        toast({ title: "Couldn't create account", description: e?.message || "Try again.", variant: "destructive" });
+        if (/email already exists/i.test(e?.message || "")) {
+          setAuthMode("login");
+          toast({ title: "You already have an account", description: "Log in with your password to continue joining." });
+          return;
+        }
+        toast({ title: "Couldn't create account", description: readableError(e?.message) || "Try again.", variant: "destructive" });
         return;
       }
     }
@@ -63,21 +108,24 @@ export default function JoinFoundingPage() {
   };
 
   const doLogin = async () => {
+    if (preview) return setPhase("birthday");
     setSaving(true);
     try {
       await loginMutation.mutateAsync({ usernameOrEmail: form.email, password: form.password });
-      setPhase("city"); // logged in — continue the funnel
+      setPhase("birthday"); // logged in — continue the funnel
     } catch {
       /* loginMutation.onError shows the toast */
     } finally { setSaving(false); }
   };
 
   const submit = async () => {
+    if (preview) return setPhase("done");
     setSaving(true);
     try {
       await apiRequest("/api/founding-signup", { method: "POST", data: {
         city: form.waitlisted ? (form.otherCity || "") : form.city,
         waitlisted: form.waitlisted,
+        birthdate: form.birthdate,
         disciplines: form.disciplines,
         availability: form.availability,
         activity: form.activity || "open",
@@ -101,14 +149,18 @@ export default function JoinFoundingPage() {
     phase === "register" ? (authMode === "login"
       ? form.email.trim().length > 0 && form.password.length >= 1
       : form.email.includes("@") && form.password.length >= 6 && !!form.firstName && form.phone.trim().length >= 7) :
+    phase === "birthday" ? age !== null && age >= 18 && age < 110 :
     phase === "city" ? (!!form.city || (form.waitlisted && form.otherCity.trim().length > 0)) :
     phase === "disciplines" ? true :
     phase === "availability" ? form.availability.length > 0 :
-    phase === "activity" ? !!form.activity : true;
+    phase === "activity" ? !!form.activity && form.smsOptIn : true;
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       <Helmet><title>Join Christ Collective — Founding Members</title></Helmet>
+      {preview && (
+        <div className="bg-[#D4AF37] text-black text-center text-xs font-semibold py-1.5">Preview mode — nothing is saved, no account is created</div>
+      )}
 
       {phase !== "done" && (
         <div className="px-5 pt-6 pb-2">
@@ -159,6 +211,17 @@ export default function JoinFoundingPage() {
           </div>
         )}
 
+        {phase === "birthday" && (
+          <div>
+            <div className="flex items-center gap-2 mb-1"><Cake className="w-5 h-5 text-[#D4AF37]" /><h1 className="text-2xl font-extrabold tracking-tight">When's your birthday?</h1></div>
+            <p className="text-gray-400 text-sm mb-5">Meetups are 18+. We use this to match you with people in a similar season of life — it's never shown publicly.</p>
+            <BirthdayPicker value={form.birthdate} onChange={(v) => set("birthdate", v)} />
+            {age !== null && age < 18 && (
+              <p className="text-sm text-red-400 mt-4">You need to be 18 or older to join Matchups. We'd love to have you once you're 18!</p>
+            )}
+          </div>
+        )}
+
         {phase === "city" && (
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight mb-1">Where in LA are you?</h1>
@@ -185,11 +248,17 @@ export default function JoinFoundingPage() {
         {phase === "disciplines" && (
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight mb-1">What do you create?</h1>
-            <p className="text-gray-400 text-sm mb-5">Pick any that fit — helps us match you well.</p>
+            <p className="text-gray-400 text-sm mb-5">
+              Pick up to {MAX_DISCIPLINES} — helps us match you well. <span className="text-[#D4AF37] font-medium">{form.disciplines.length}/{MAX_DISCIPLINES}</span>
+            </p>
             <div className="flex flex-wrap gap-2.5">
-              {DISCIPLINES.map((d) => (
-                <button key={d} onClick={() => toggle("disciplines", d)} className={cn("px-4 py-2.5 rounded-full text-sm font-medium border transition-colors", form.disciplines.includes(d) ? "bg-[#D4AF37] text-black border-transparent" : "bg-transparent border-gray-700 text-gray-300 hover:border-[#D4AF37]")}>{d}</button>
-              ))}
+              {DISCIPLINES.map((d) => {
+                const on = form.disciplines.includes(d);
+                const full = !on && form.disciplines.length >= MAX_DISCIPLINES;
+                return (
+                  <button key={d} onClick={() => toggle("disciplines", d, MAX_DISCIPLINES)} disabled={full} className={cn("px-4 py-2.5 rounded-full text-sm font-medium border transition-colors", on ? "bg-[#D4AF37] text-black border-transparent" : "bg-transparent border-gray-700 text-gray-300 hover:border-[#D4AF37]", full && "opacity-35 hover:border-gray-700 cursor-not-allowed")}>{d}</button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -197,10 +266,16 @@ export default function JoinFoundingPage() {
         {phase === "availability" && (
           <div>
             <div className="flex items-center gap-2 mb-1"><CalendarClock className="w-5 h-5 text-[#D4AF37]" /><h1 className="text-2xl font-extrabold tracking-tight">When are you usually free?</h1></div>
-            <p className="text-gray-400 text-sm mb-5">Pick any that generally work — we'll use this to find a time that fits your circle. No exact date yet; we'll set one once enough people join.</p>
-            <div className="space-y-2.5">
-              {WINDOWS.map((w) => <Row key={w} label={w} on={form.availability.includes(w)} onClick={() => toggle("availability", w)} />)}
-            </div>
+            <p className="text-gray-400 text-sm mb-5">
+              Tap up to {MAX_WINDOWS} times that usually work. No exact date yet — we'll set one once your circle fills.
+            </p>
+            <AvailabilityGrid selected={form.availability} onToggle={(w) => toggle("availability", w, MAX_WINDOWS)} />
+            <button
+              onClick={() => set("availability", form.availability.includes(FLEXIBLE) ? [] : [FLEXIBLE])}
+              className={cn("w-full mt-4 py-3 rounded-xl border text-sm font-medium transition-colors", form.availability.includes(FLEXIBLE) ? "bg-[#D4AF37]/10 border-[#D4AF37] text-[#D4AF37]" : "border-gray-800 text-gray-400 hover:border-[#D4AF37]/50")}
+            >
+              {form.availability.includes(FLEXIBLE) ? "✓ I'm flexible — any time works" : "I'm flexible — any time works"}
+            </button>
           </div>
         )}
 
@@ -208,19 +283,19 @@ export default function JoinFoundingPage() {
           <div>
             <div className="flex items-center gap-2 mb-1"><Coffee className="w-5 h-5 text-[#D4AF37]" /><h1 className="text-2xl font-extrabold tracking-tight">What sounds fun?</h1></div>
             <p className="text-gray-400 text-sm mb-5">How would you like to meet your circle?</p>
-            <div className="space-y-2.5">
-              {ACTIVITIES.map((a) => <Row key={a.v} label={a.l} on={form.activity === a.v} onClick={() => set("activity", a.v)} />)}
+            <div className="grid grid-cols-2 gap-2.5">
+              {ACTIVITIES.map((a, i) => (
+                <ActivityCard key={a.v} label={a.l} img={a.img} on={form.activity === a.v} onClick={() => set("activity", a.v)} wide={i === ACTIVITIES.length - 1} />
+              ))}
             </div>
-            {form.activity && (
-              <label className="flex items-start gap-3 mt-5 p-3 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/[0.04] cursor-pointer" onClick={() => set("smsOptIn", !form.smsOptIn)}>
-                <span className={cn("w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 mt-0.5", form.smsOptIn ? "bg-[#D4AF37] border-[#D4AF37]" : "border-gray-600")}>
-                  {form.smsOptIn && <Check className="w-3 h-3 text-black" />}
-                </span>
-                <span className="text-xs text-gray-400 leading-relaxed">
-                  Matchups are coordinated by text — I agree to receive SMS from Christ Collective about my Matchups so we can match me (~4–6/cycle). Msg &amp; data rates may apply. Reply STOP to cancel.
-                </span>
-              </label>
-            )}
+            <label className={cn("flex items-start gap-3 mt-5 p-3 rounded-xl border cursor-pointer transition-colors", form.smsOptIn ? "border-[#D4AF37]/40 bg-[#D4AF37]/[0.04]" : "border-gray-700")} onClick={() => set("smsOptIn", !form.smsOptIn)}>
+              <span className={cn("w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 mt-0.5", form.smsOptIn ? "bg-[#D4AF37] border-[#D4AF37]" : "border-gray-500")}>
+                {form.smsOptIn && <Check className="w-3 h-3 text-black" />}
+              </span>
+              <span className="text-xs text-gray-400 leading-relaxed">
+                <span className="text-white font-medium">Required:</span> Matchups are coordinated by text — I agree to receive SMS from Christ Collective about my Matchups so we can match me (~4–6/cycle). Msg &amp; data rates may apply. Reply STOP to cancel.
+              </span>
+            </label>
           </div>
         )}
 
@@ -313,12 +388,92 @@ function CitySelect({ value, onChange }: { value: string; onChange: (c: string) 
   );
 }
 
-function Row({ label, on, onClick, icon }: { label: string; on: boolean; onClick: () => void; icon?: ReactNode }) {
+// Month / Day / Year selects → "YYYY-MM-DD" (only emitted once all three are picked)
+function BirthdayPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [y0, m0, d0] = value ? value.split("-") : ["", "", ""];
+  const [parts, setParts] = useState({ y: y0, m: m0, d: d0 });
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 83 }, (_, i) => String(thisYear - 18 - i + 1)); // newest first, ~18 → 100
+  const daysInMonth = parts.y && parts.m ? new Date(+parts.y, +parts.m, 0).getDate() : 31;
+  const update = (k: "y" | "m" | "d", v: string) => {
+    const p = { ...parts, [k]: v };
+    if (p.d && +p.d > (p.y && p.m ? new Date(+p.y, +p.m, 0).getDate() : 31)) p.d = "";
+    setParts(p);
+    onChange(p.y && p.m && p.d ? `${p.y}-${p.m}-${p.d}` : "");
+  };
+  const sel = "h-12 rounded-md bg-[#0A0A0A] border border-gray-800 text-white px-3 text-[15px] focus:outline-none focus:border-[#D4AF37]";
   return (
-    <button onClick={onClick} className={cn("w-full flex items-center justify-between gap-3 text-left px-4 py-4 rounded-xl border transition-colors", on ? "bg-[#D4AF37]/10 border-[#D4AF37]" : "bg-[#0A0A0A] border-gray-800 hover:border-[#D4AF37]/50")}>
-      <span className="flex items-center gap-2.5">{icon}<span className="text-white text-[15px] font-medium">{label}</span></span>
-      <span className={cn("w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0", on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-gray-700")}>
-        {on && <Check className="w-3 h-3 text-black" />}
+    <div className="grid grid-cols-[1.6fr_1fr_1.2fr] gap-2.5">
+      <select value={parts.m} onChange={(e) => update("m", e.target.value)} className={sel} aria-label="Month">
+        <option value="">Month</option>
+        {MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
+      </select>
+      <select value={parts.d} onChange={(e) => update("d", e.target.value)} className={sel} aria-label="Day">
+        <option value="">Day</option>
+        {Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => <option key={d} value={d}>{+d}</option>)}
+      </select>
+      <select value={parts.y} onChange={(e) => update("y", e.target.value)} className={sel} aria-label="Year">
+        <option value="">Year</option>
+        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// Days × time-of-day grid; a filled cell = that window is selected
+function AvailabilityGrid({ selected, onToggle }: { selected: string[]; onToggle: (w: string) => void }) {
+  const full = selected.filter((s) => s !== FLEXIBLE).length >= MAX_WINDOWS;
+  return (
+    <div className="rounded-2xl border border-gray-800 bg-[#0A0A0A] p-3">
+      <div className="grid grid-cols-[72px_repeat(3,1fr)] gap-2 items-center">
+        <div />
+        {TIMES.map(({ v, l, Icon }) => (
+          <div key={v} className="flex flex-col items-center gap-1 text-[11px] font-medium text-gray-400 pb-1">
+            <Icon className="w-4 h-4 text-[#D4AF37]" />{l}
+          </div>
+        ))}
+        {DAYS.map((day) => (
+          <div key={day.v} className="contents">
+            <div className="text-sm font-semibold text-gray-200">{day.l}</div>
+            {TIMES.map((t) => {
+              const w = windowLabel(day.v, t.v);
+              const on = selected.includes(w);
+              return (
+                <button
+                  key={w}
+                  onClick={() => onToggle(w)}
+                  disabled={!on && full}
+                  aria-label={w}
+                  aria-pressed={on}
+                  className={cn(
+                    "h-12 rounded-xl border flex items-center justify-center transition-colors",
+                    on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-gray-800 hover:border-[#D4AF37]/60",
+                    !on && full && "opacity-30 hover:border-gray-800 cursor-not-allowed",
+                  )}
+                >
+                  {on && <Check className="w-4 h-4 text-black" />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-500 text-center mt-3">{selected.filter((s) => s !== FLEXIBLE).length}/{MAX_WINDOWS} selected</p>
+    </div>
+  );
+}
+
+function ActivityCard({ label, img, on, onClick, wide }: { label: string; img: string; on: boolean; onClick: () => void; wide?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn("relative overflow-hidden rounded-2xl border-2 text-left transition-all", wide ? "col-span-2 h-24" : "h-32", on ? "border-[#D4AF37] shadow-[0_0_0_3px_rgba(212,175,55,0.25)]" : "border-transparent")}
+    >
+      <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="eager" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+      <span className="absolute left-3 bottom-2.5 text-white text-[15px] font-bold drop-shadow">{label}</span>
+      <span className={cn("absolute top-2.5 right-2.5 w-6 h-6 rounded-full border-2 flex items-center justify-center", on ? "bg-[#D4AF37] border-[#D4AF37]" : "border-white/70 bg-black/30")}>
+        {on && <Check className="w-3.5 h-3.5 text-black" />}
       </span>
     </button>
   );

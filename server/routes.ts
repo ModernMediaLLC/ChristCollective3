@@ -183,13 +183,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const me = await storage.getUser(req.user.id);
       const consented = (me as any)?.smsOptIn === true || b.smsOptIn === true;
       if (!consented) return res.status(400).json({ message: "SMS consent is required to be matched.", needsSmsConsent: true });
+      // Birthday is required and Matchups are 18+ (Terms §5)
+      const birthdate = typeof b.birthdate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.birthdate) ? b.birthdate : ((me as any)?.birthdate ? null : undefined);
+      if (birthdate === undefined) return res.status(400).json({ message: "Please add your birthday." });
+      if (birthdate) {
+        const [y, m, d] = birthdate.split("-").map(Number);
+        const now = new Date();
+        const age = now.getFullYear() - y - (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d) ? 1 : 0);
+        if (Number.isNaN(age) || age < 18 || age > 110) return res.status(400).json({ message: "You must be 18 or older to join Matchups." });
+      }
       const update: any = { onboardingCompleted: true, waitlisted };
+      if (birthdate) update.birthdate = birthdate;
       if (typeof b.city === "string" && b.city) update.city = b.city;
-      if (Array.isArray(b.disciplines)) update.disciplines = b.disciplines.slice(0, 12).map(String);
+      if (Array.isArray(b.disciplines)) update.disciplines = b.disciplines.slice(0, 3).map(String);
       if (["same_field", "different_fields", "open"].includes(b.matchPreference)) update.matchPreference = b.matchPreference;
       if (typeof b.phone === "string" && b.phone) update.phone = b.phone;
       if (typeof b.smsOptIn === "boolean") update.smsOptIn = b.smsOptIn;
-      const availability = Array.isArray(b.availability) ? b.availability.slice(0, 12).map(String) : [];
+      const availability = Array.isArray(b.availability) ? b.availability.slice(0, 3).map(String) : [];
       update.matchupRequest = {
         activity: typeof b.activity === "string" && b.activity ? b.activity : "open",
         slot: availability.join(", "),
