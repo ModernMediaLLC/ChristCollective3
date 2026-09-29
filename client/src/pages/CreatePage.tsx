@@ -91,7 +91,7 @@ export default function CreatePage() {
       icon: Briefcase,
       color: "text-white",
       bgColor: "bg-[#D4AF37]",
-      href: "/business/create",
+      href: "/join/business",
       badge: null,
       userType: "all"
     },
@@ -102,7 +102,7 @@ export default function CreatePage() {
       icon: Building,
       color: "text-white",
       bgColor: "bg-gray-700",
-      href: "/ministry/create",
+      href: "/join/ministry",
       badge: null,
       userType: "all"
     },
@@ -153,7 +153,8 @@ export default function CreatePage() {
 
   // Check what profiles user already has
   const hasCreatorProfile = (creatorStatus as any)?.isCreator;
-  const hasBusinessProfile = businessProfiles && (businessProfiles as any[])?.length > 0;
+  // /api/business-profiles lists everyone's — only count the one this user owns
+  const hasBusinessProfile = Array.isArray(businessProfiles) && businessProfiles.some((p: any) => p.userId === user.id);
   const hasMinistryProfile = ministryProfile && !(ministryProfile as any)?.message;
 
   // Filter base options based on existing profiles

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Helmet } from "react-helmet";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -89,6 +89,13 @@ export default function DirectoryJoinPage({ kind }: { kind: Kind }) {
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const [logo, setLogo] = useState({ file: null as File | null, url: "" });
+  // Logged-in users who already own a listing get sent to edit it instead of redoing the funnel
+  const { data: existing } = useQuery<any>({
+    queryKey: [kind === "business" ? "/api/user/business-profile" : "/api/user/ministry-profile"],
+    enabled: loggedIn && !preview && phase === "intro",
+    retry: false,
+  });
+  const editPath = kind === "business" ? "/edit-profile" : "/edit-ministry-profile";
 
   const advance = (p: Phase, dir: 1 | -1 = 1) => {
     let i = ORDER.indexOf(p) + dir;
@@ -111,7 +118,7 @@ export default function DirectoryJoinPage({ kind }: { kind: Kind }) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const username = base + Math.floor(1000 + Math.random() * 89999);
       try {
-        const res: any = await registerMutation.mutateAsync({ username, email: form.email, password: form.password, firstName: form.firstName, phone: form.phone } as any);
+        const res: any = await registerMutation.mutateAsync({ username, email: form.email, password: form.password, firstName: form.firstName, phone: form.phone, userType: kind === "business" ? "business_owner" : "ministry" } as any);
         if (res?.id) { trackMetaEvent("CompleteRegistration", { content_category: kind }); setSaving(false); afterAuth(); return; }
         if (res?.requiresLogin) { setSaving(false); toast({ title: "Account created", description: "Please sign in to continue." }); navigate(`/auth?redirect=/join/${kind}`); return; }
       } catch (e: any) {
@@ -177,7 +184,7 @@ export default function DirectoryJoinPage({ kind }: { kind: Kind }) {
       const msg = readableError(e?.message);
       if (/already has a/i.test(msg)) {
         toast({ title: `You already have a ${c.noun} profile`, description: "You can edit it from your profile." });
-        navigate(kind === "business" ? "/edit-profile" : "/edit-ministry-profile");
+        navigate(editPath);
         return;
       }
       toast({ title: "Something went wrong", description: msg || "Please try again.", variant: "destructive" });
@@ -258,6 +265,12 @@ export default function DirectoryJoinPage({ kind }: { kind: Kind }) {
             <p className="text-gray-400 text-[14px] leading-relaxed">
               Just want to meet people? <button onClick={() => navigate("/join")} className="text-[#D4AF37] hover:underline">Join as a member instead →</button>
             </p>
+            {existing?.id && (
+              <div className="mt-6 p-4 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/[0.06] text-sm">
+                <p className="text-white font-semibold mb-1">You already have a {c.noun} listing{existing.companyName || existing.name ? `: ${existing.companyName || existing.name}` : ""}</p>
+                <button onClick={() => navigate(editPath)} className="text-[#D4AF37] hover:underline">Edit it instead →</button>
+              </div>
+            )}
             {!loggedIn && (
               <button onClick={() => { setAuthMode("login"); setPhase("register"); }} className="mt-6 text-sm text-[#D4AF37] hover:underline">
                 Already have an account? Log in

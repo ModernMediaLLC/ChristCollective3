@@ -212,7 +212,7 @@ export default function EventCreatePage() {
           <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-400 mb-2">Ministry Profile Required</h2>
           <p className="text-gray-500 mb-6">You need a ministry profile to create events.</p>
-          <Button onClick={() => navigate("/ministry/create")} className="bg-primary hover:bg-primary/90">
+          <Button onClick={() => navigate("/join/ministry")} className="bg-primary hover:bg-primary/90">
             Create Ministry Profile
           </Button>
         </div>
