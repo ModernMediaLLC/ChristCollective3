@@ -86,15 +86,9 @@ export default function BusinessSection() {
                 asChild
                 className="bg-primary hover:bg-primary/90 text-white"
               >
-                {isAuthenticated ? (
-                  <Link href="/profile">
-                    Create Your Business Profile
-                  </Link>
-                ) : (
-                  <Link href="/auth">
-                    Create Your Business Profile
-                  </Link>
-                )}
+                <Link href="/join/business">
+                  List Your Business — Free
+                </Link>
               </Button>
             </div>
           </div>

@@ -68,7 +68,15 @@ export default function MinistriesPage() {
             <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
               Discover and connect with ministries, churches, and Christian organizations making a difference in communities worldwide
             </p>
-            
+            <div className="mb-10">
+              <Link href="/join/ministry">
+                <Button className="bg-[#D4AF37] hover:bg-[#B8941F] text-black font-bold h-12 px-8 text-base">
+                  List your ministry — free
+                </Button>
+              </Link>
+              <p className="text-sm text-gray-500 mt-3">Takes about 2 minutes. Founding ministries get featured first.</p>
+            </div>
+
             {/* Search and Filter */}
             <div className="max-w-2xl mx-auto space-y-4">
               <div className="relative">
@@ -140,9 +148,11 @@ export default function MinistriesPage() {
                 }
               </p>
               {!searchQuery && !denominationFilter && (
-                <Button className="bg-primary hover:bg-primary/90">
-                  Add Your Ministry
-                </Button>
+                <Link href="/join/ministry">
+                  <Button className="bg-primary hover:bg-primary/90">
+                    Add Your Ministry
+                  </Button>
+                </Link>
               )}
             </div>
           ) : (

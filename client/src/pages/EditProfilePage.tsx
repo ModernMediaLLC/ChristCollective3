@@ -167,6 +167,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { INDUSTRIES } from "@/lib/directoryOptions";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -1284,15 +1285,9 @@ export default function EditProfilePage() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent className="bg-gray-800 border-gray-600">
-                                <SelectItem value="technology">Technology</SelectItem>
-                                <SelectItem value="healthcare">Healthcare</SelectItem>
-                                <SelectItem value="education">Education</SelectItem>
-                                <SelectItem value="finance">Finance</SelectItem>
-                                <SelectItem value="retail">Retail</SelectItem>
-                                <SelectItem value="consulting">Consulting</SelectItem>
-                                <SelectItem value="ministry">Ministry</SelectItem>
-                                <SelectItem value="nonprofit">Non-Profit</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
+                                {/* keep an older saved value (e.g. "technology") selectable */}
+                                {field.value && !INDUSTRIES.includes(field.value) && <SelectItem value={field.value}>{field.value}</SelectItem>}
+                                {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
                               </SelectContent>
                             </Select>
                             <FormMessage />

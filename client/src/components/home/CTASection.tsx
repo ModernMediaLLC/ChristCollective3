@@ -6,10 +6,11 @@ import blueSkyBg from "@assets/Beautiful_blue_sky_background_7b0e6fef20.jpg";
 import communityGroupImg from "@assets/pexels-bertellifotografia-3752600.jpg";
 
 export default function CTASection() {
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
   
   // Fetch live statistics
-  const { data: statistics, isLoading } = useQuery({
+  const { data: statistics, isLoading } = useQuery<any>({
     queryKey: ["/api/statistics"],
   });
 
@@ -40,7 +41,9 @@ export default function CTASection() {
                 <span>My Account</span>
               </Link>
             ) : (
-              <a href="/api/login">Create Your Account</a>
+              <Link href="/join">
+                <span>Create Your Account</span>
+              </Link>
             )}
           </Button>
           <Button 
@@ -76,28 +79,33 @@ export default function CTASection() {
             </div>
             <p className="text-gray-300">Donations Raised</p>
           </div>
-          <div>
-            <div className="text-4xl font-bold text-primary mb-2">
-              {isLoading ? (
-                <div className="h-10 bg-gray-300 rounded animate-pulse"></div>
-              ) : (
-                `${statistics?.businessMembers || 0}+`
-              )}
-            </div>
-            <p className="text-gray-300">Business Members</p>
-          </div>
-          <div>
-            <div className="text-4xl font-bold text-primary mb-2">
-              {isLoading ? (
-                <div className="h-10 bg-gray-300 rounded animate-pulse"></div>
-              ) : (
-                `${statistics?.industries || 0}+`
-              )}
-            </div>
-            <p className="text-gray-300">Industries</p>
-          </div>
+          {/* Directories are brand new — until they fill up, these tiles invite signups instead of showing "0+" */}
+          <DirectoryStat count={statistics?.businessMembers} label="Business Members" noun="business" cta="List your business" href="/join/business" isLoading={isLoading} />
+          <DirectoryStat count={statistics?.ministries} label="Ministries" noun="ministry" cta="List your ministry" href="/join/ministry" isLoading={isLoading} />
         </div>
       </div>
     </section>
+  );
+}
+
+const MIN_TO_SHOW_COUNT = 10;
+
+function DirectoryStat({ count, label, noun, cta, href, isLoading }: { count?: number; label: string; noun: string; cta: string; href: string; isLoading: boolean }) {
+  if (isLoading) return <div><div className="h-10 bg-gray-300 rounded animate-pulse mb-2"></div><p className="text-gray-300">{label}</p></div>;
+  if ((count || 0) >= MIN_TO_SHOW_COUNT) {
+    return (
+      <div>
+        <div className="text-4xl font-bold text-primary mb-2">{count}+</div>
+        <p className="text-gray-300">{label}</p>
+      </div>
+    );
+  }
+  return (
+    <Link href={href}>
+      <div className="cursor-pointer group">
+        <div className="text-2xl md:text-3xl font-bold text-primary mb-2 group-hover:underline">{cta} →</div>
+        <p className="text-gray-300">Be a founding {noun} — free</p>
+      </div>
+    </Link>
   );
 }

@@ -139,7 +139,15 @@ export default function BusinessNetworkPage() {
             <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
               Connect with Christian business owners and professionals who share your values. Build meaningful relationships and grow your network in our faith-centered community.
             </p>
-            
+            <div className="mb-10">
+              <Link href="/join/business">
+                <Button className="bg-[#D4AF37] hover:bg-[#B8941F] text-black font-bold h-12 px-8 text-base">
+                  List your business — free
+                </Button>
+              </Link>
+              <p className="text-sm text-gray-500 mt-3">Takes about 2 minutes. Founding businesses get featured first.</p>
+            </div>
+
             {/* Search and Filter */}
             <div className="max-w-2xl mx-auto space-y-4">
               <div className="relative">
@@ -211,9 +219,11 @@ export default function BusinessNetworkPage() {
                 }
               </p>
               {!searchQuery && !industryFilter && (
-                <Button className="bg-primary hover:bg-primary/90">
-                  Add Your Business
-                </Button>
+                <Link href="/join/business">
+                  <Button className="bg-primary hover:bg-primary/90">
+                    Add Your Business
+                  </Button>
+                </Link>
               )}
             </div>
           ) : (

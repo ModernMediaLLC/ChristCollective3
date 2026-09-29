@@ -2736,6 +2736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const campaigns = await storage.listCampaigns();
       const businessProfiles = await storage.listBusinessProfiles();
       const users = await storage.getUsersCount();
+      const ministries = await storage.getAllMinistries();
 
       // Zeffy total — update this manually when syncing from Zeffy dashboard
       const ZEFFY_DONATIONS_RAISED = 2561;
@@ -2748,6 +2749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         communityMembers: users,
         donationsRaised: totalDonations,
         businessMembers: businessProfiles.length,
+        ministries: ministries.length,
         industries: industries.size,
         supportAvailable: "24/7"
       });

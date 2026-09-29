@@ -65,12 +65,14 @@ export default function CreatorsPage() {
             Discover our sponsored creators spreading faith-based messages across platforms.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/sponsorship-application">
+            <Link href="/join">
               <Button className="bg-[#D4AF37] hover:bg-[#B8941F] text-black font-bold px-7">
-                Apply for Sponsorship
+                Join as a Creator
               </Button>
             </Link>
-            <Button variant="glass">Learn More</Button>
+            <Link href="/sponsorship-application">
+              <Button variant="glass">Apply for Sponsorship</Button>
+            </Link>
           </div>
         </div>
       </div>
@@ -142,7 +144,10 @@ export default function CreatorsPage() {
               <Users className="w-7 h-7 text-gray-500" />
             </div>
             <h3 className="text-lg font-semibold mb-1">No Creators Yet</h3>
-            <p className="text-gray-500 text-sm">We're reviewing applications. Check back soon!</p>
+            <p className="text-gray-500 text-sm mb-5">We're reviewing applications. Check back soon!</p>
+            <Link href="/join">
+              <Button className="bg-[#D4AF37] hover:bg-[#B8941F] text-black font-bold px-7">Join as a Creator</Button>
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -25,6 +25,7 @@ import OnboardingPage from "@/pages/OnboardingPage";
 import MatchupsPage from "@/pages/MatchupsPage";
 import ClubProfilePage from "@/pages/ClubProfilePage";
 import JoinFoundingPage from "@/pages/JoinFoundingPage";
+import DirectoryJoinPage from "@/pages/DirectoryJoinPage";
 import SponsoredCreatorsPage from "@/pages/SponsoredCreatorsPage";
 import SponsorshipApplicationPage from "@/pages/SponsorshipApplicationPageNew";
 import CreatorsPage from "@/pages/CreatorsPage";
@@ -87,6 +88,8 @@ function Router() {
       <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/join" component={JoinFoundingPage} />
+      <Route path="/join/business">{() => <DirectoryJoinPage kind="business" />}</Route>
+      <Route path="/join/ministry">{() => <DirectoryJoinPage kind="ministry" />}</Route>
       <Route path="/matchups" component={MatchupsPage} />
       <Route path="/donate" component={DonationsPage} />
       <Route path="/donate/create" component={CreateCampaignPage} />
@@ -159,7 +162,7 @@ function AppContent() {
   const [location] = useLocation();
 
   // Focused funnels + immersive detail pages hide the app chrome (bottom nav + web footer).
-  const isFunnel = location === "/onboarding" || location === "/matchups" || location === "/join" || location.startsWith("/club/");
+  const isFunnel = location === "/onboarding" || location === "/matchups" || location === "/join" || location.startsWith("/join/") || location.startsWith("/club/");
 
   // Show bottom navigation if (mobile app OR logged-in web) AND not inside a funnel.
   const showBottomNav = (isMobileApp || !!user) && !isFunnel;
