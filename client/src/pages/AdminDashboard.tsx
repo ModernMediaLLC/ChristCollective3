@@ -512,7 +512,32 @@ export default function AdminDashboard() {
                     )}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       {selectedUser.city && <div><span className="text-gray-500">City: </span><span className="text-gray-300">{selectedUser.city}</span></div>}
-                      {(selectedUser as any).instagram && <div><span className="text-gray-500">IG: </span><a href={`https://instagram.com/${String((selectedUser as any).instagram).replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-[#D4AF37] hover:underline">@{String((selectedUser as any).instagram).replace(/^@/, "")}</a></div>}
+                      {(selectedUser as any).instagram && (
+                        <div className="col-span-2 flex items-center gap-2 flex-wrap">
+                          <span className="text-gray-500">IG: </span>
+                          <a href={`https://instagram.com/${String((selectedUser as any).instagram).replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-[#D4AF37] hover:underline">@{String((selectedUser as any).instagram).replace(/^@/, "")}</a>
+                          {(selectedUser as any).instagramVerified
+                            ? <Badge className="bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30 text-[10px]">✓ Verified</Badge>
+                            : <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-500">Unverified</Badge>}
+                          <button
+                            className="text-[11px] text-gray-400 hover:text-white underline"
+                            onClick={async () => {
+                              const verified = !(selectedUser as any).instagramVerified;
+                              try {
+                                await apiRequest(`/api/admin/users/${selectedUser.id}/instagram-verified`, { method: "PATCH", data: { verified } });
+                                setSelectedUser({ ...(selectedUser as any), instagramVerified: verified });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+                              } catch (e: any) {
+                                const raw = String(e?.message || "").replace(/^\d{3}:\s*/, "");
+                                let msg = raw; try { msg = JSON.parse(raw).message || raw; } catch { /* plain text */ }
+                                toast({ title: msg || "Couldn't update", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            {(selectedUser as any).instagramVerified ? "Remove verification" : "Mark verified"}
+                          </button>
+                        </div>
+                      )}
                       {(selectedUser as any).gender && <div><span className="text-gray-500">Gender: </span><span className="text-gray-300">{(selectedUser as any).gender}</span></div>}
                       {(selectedUser as any).birthdate && <div><span className="text-gray-500">Birthday: </span><span className="text-gray-300">{String((selectedUser as any).birthdate)}</span></div>}
                       {(selectedUser as any).matchPreference && <div><span className="text-gray-500">Wants to meet: </span><span className="text-gray-300">{prettifyToken((selectedUser as any).matchPreference)}</span></div>}

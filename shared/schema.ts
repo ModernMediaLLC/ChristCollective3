@@ -66,6 +66,9 @@ export const users = pgTable("users", {
   city: varchar("city"),
   gender: varchar("gender"),
   instagram: varchar("instagram"),
+  instagramVerified: boolean("instagram_verified").default(false),   // proved ownership via bio code
+  instagramVerifyCode: varchar("instagram_verify_code"),              // pending one-time code (never public)
+  instagramVerifiedAt: timestamp("instagram_verified_at"),
   disciplines: text("disciplines").array(),        // creative fields, e.g. ["Founder","Illustration"]
   interests: text("interests").array(),            // "I love…" tags
   creativeGoals: text("creative_goals"),

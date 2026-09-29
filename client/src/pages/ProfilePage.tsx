@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Settings, Edit, ArrowLeft, Play, Heart, Eye, Bookmark, Camera, AlignLeft, MoreHorizontal, UserMinus, MapPin, Instagram } from "lucide-react";
+import { Settings, Edit, ArrowLeft, Play, Heart, Eye, Bookmark, Camera, AlignLeft, MoreHorizontal, UserMinus, MapPin, Instagram, BadgeCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformPostCard } from "@/components/PlatformPostCard";
 import { FollowersModal } from "@/components/FollowersModal";
@@ -383,6 +383,7 @@ export default function ProfilePage() {
                       className="flex items-center gap-1 hover:text-[#D4AF37] transition-colors"
                     >
                       <Instagram className="w-3.5 h-3.5 text-[#D4AF37]" />@{String(displayUser.instagram).replace(/^@/, "")}
+                      {(displayUser as any).instagramVerified && <BadgeCheck className="w-3.5 h-3.5 text-[#D4AF37]" aria-label="Verified Instagram" />}
                     </a>
                   )}
                 </div>

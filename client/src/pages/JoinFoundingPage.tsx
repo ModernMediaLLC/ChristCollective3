@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { buildApiUrl, getMobileAuthHeaders } from "@/lib/api-config";
+import InstagramVerify from "@/components/InstagramVerify";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -377,10 +378,7 @@ export default function JoinFoundingPage() {
             <p className="text-right text-[11px] text-gray-600 mb-4">{profile.bio.length}/{BIO_MAX}</p>
 
             <label className="block text-sm font-semibold text-gray-200 mb-1.5">Instagram <span className="text-gray-500 font-normal">(optional)</span></label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">@</span>
-              <Input value={profile.instagram} onChange={(e) => setProfile((p) => ({ ...p, instagram: e.target.value.replace(/^@/, "") }))} placeholder="yourhandle" autoCapitalize="none" className="bg-[#0A0A0A] border-gray-800 text-white h-12 pl-8" />
-            </div>
+            <InstagramVerify value={profile.instagram} onChange={(h) => setProfile((p) => ({ ...p, instagram: h }))} preview={preview} />
           </div>
         )}
 

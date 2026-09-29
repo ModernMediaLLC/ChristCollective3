@@ -43,6 +43,11 @@ import { moderateContent } from "./services/moderationService";
 import { sendPushToUser } from "./pushNotifications";
 import { pool } from "./db";
 
+// Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
+const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
+const normalizeInstagram = (v: unknown) =>
+  String(v ?? "").trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").replace(/[/?#].*$/, "");
+
 const uploadBufferToObjectStorage = uploadToSupabase;
 
 let stripe: Stripe | undefined;
@@ -124,9 +129,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (phone !== undefined) updateData.phone = phone;
       if (profileImageUrl !== undefined) updateData.profileImageUrl = profileImageUrl;
       if (instagram !== undefined) {
-        // Accept "@handle", "handle" or an instagram.com URL; store the bare handle
-        const handle = String(instagram).trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").replace(/[/?#].*$/, "");
-        if (handle && !/^[A-Za-z0-9._]{1,30}$/.test(handle)) return res.status(400).json({ message: "That doesn't look like an Instagram handle", field: "instagram" });
+        const handle = normalizeInstagram(instagram);
+        if (handle && !INSTAGRAM_HANDLE.test(handle)) return res.status(400).json({ message: "That doesn't look like an Instagram handle", field: "instagram" });
+        const current = await storage.getUser(userId);
+        // Changing the handle drops any verification tied to the old one
+        if ((current as any)?.instagram?.toLowerCase() !== (handle || "").toLowerCase()) {
+          Object.assign(updateData, { instagramVerified: false, instagramVerifyCode: null, instagramVerifiedAt: null });
+        }
         updateData.instagram = handle || null;
       }
       if (showEmail !== undefined) updateData.showEmail = typeof showEmail === 'boolean' ? showEmail : showEmail === 'true';
@@ -182,6 +191,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Founding-launch signup: profile + GENERAL availability (no fixed date yet) + geo waitlist.
   // Drops the member into the matching queue (via matchupRequest) in one call.
+  // ── Instagram ownership verification (bio code, checked via Apify's Instagram Profile Scraper) ──
+  // Flow: /start saves the handle + issues a code → member pastes it in their bio → /check starts an
+  // Apify run (takes ~30–60s) → client polls /status until the bio is read and the code is found.
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS instagram_verified boolean DEFAULT false,
+      ADD COLUMN IF NOT EXISTS instagram_verify_code varchar,
+      ADD COLUMN IF NOT EXISTS instagram_verified_at timestamp
+  `).catch((e) => console.error("[instagram-verify] column setup failed:", e?.message || e));
+
+  const igRuns = new Map<string, { userId: string; handle: string; code: string; at: number }>(); // Apify runId → who asked
+  const igChecks = new Map<string, number[]>(); // userId → recent check timestamps (cost guard)
+  const IG_CHECKS_PER_HOUR = 6;
+
+  const findVerifiedOwner = async (handle: string, exceptUserId: string) => {
+    const r = await pool.query(
+      `SELECT id FROM users WHERE lower(instagram) = lower($1) AND instagram_verified = true AND id <> $2 LIMIT 1`,
+      [handle, exceptUserId],
+    );
+    return r.rows[0]?.id as string | undefined;
+  };
+
+  app.post("/api/instagram/verify/start", isAuthenticated, writeLimiter, async (req: any, res) => {
+    try {
+      const handle = normalizeInstagram(req.body?.handle);
+      if (!handle || !INSTAGRAM_HANDLE.test(handle)) return res.status(400).json({ message: "Enter a valid Instagram handle" });
+      if (await findVerifiedOwner(handle, req.user.id)) {
+        return res.status(409).json({ message: "That Instagram is already verified on another Christ Collective account." });
+      }
+      const me: any = await storage.getUser(req.user.id);
+      const sameHandle = me?.instagram?.toLowerCase() === handle.toLowerCase();
+      if (sameHandle && me?.instagramVerified) return res.json({ handle, verified: true });
+      // Reuse a pending code for the same handle so re-opening the step doesn't invalidate what they pasted
+      const code = sameHandle && me?.instagramVerifyCode ? me.instagramVerifyCode : `CC-${Math.floor(1000 + Math.random() * 9000)}`;
+      await storage.updateUser(req.user.id, { instagram: handle, instagramVerified: false, instagramVerifyCode: code, instagramVerifiedAt: null } as any);
+      res.json({ handle, code, verified: false });
+    } catch (error) {
+      console.error("[instagram-verify] start:", error);
+      res.status(500).json({ message: "Couldn't start verification" });
+    }
+  });
+
+  app.post("/api/instagram/verify/check", isAuthenticated, async (req: any, res) => {
+    try {
+      const token = process.env.APIFY_TOKEN;
+      if (!token) return res.status(503).json({ message: "Instagram verification isn't available right now." });
+      const me: any = await storage.getUser(req.user.id);
+      if (!me?.instagram || !me?.instagramVerifyCode) return res.status(400).json({ message: "Start verification first" });
+      const now = Date.now();
+      const recent = (igChecks.get(req.user.id) || []).filter((t) => now - t < 3600_000);
+      if (recent.length >= IG_CHECKS_PER_HOUR) return res.status(429).json({ message: "Too many checks — try again in an hour." });
+      igChecks.set(req.user.id, [...recent, now]);
+
+      const r = await fetch(`https://api.apify.com/v2/acts/apify~instagram-profile-scraper/runs?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usernames: [me.instagram] }),
+      });
+      const run: any = await r.json().catch(() => ({}));
+      const runId = run?.data?.id;
+      if (!r.ok || !runId) {
+        console.error("[instagram-verify] Apify start failed:", r.status, run?.error?.message);
+        return res.status(502).json({ message: "Couldn't reach Instagram right now — try again shortly." });
+      }
+      igRuns.set(runId, { userId: req.user.id, handle: me.instagram, code: me.instagramVerifyCode, at: now });
+      res.json({ runId });
+    } catch (error) {
+      console.error("[instagram-verify] check:", error);
+      res.status(500).json({ message: "Couldn't check your bio" });
+    }
+  });
+
+  app.get("/api/instagram/verify/status/:runId", isAuthenticated, async (req: any, res) => {
+    try {
+      const job = igRuns.get(req.params.runId);
+      if (!job || job.userId !== req.user.id) return res.status(404).json({ message: "Check not found — tap Verify again." });
+      const token = process.env.APIFY_TOKEN;
+      const run: any = await (await fetch(`https://api.apify.com/v2/actor-runs/${req.params.runId}?token=${token}`)).json();
+      const status = run?.data?.status;
+      if (status === "READY" || status === "RUNNING") return res.json({ status: "running" });
+      igRuns.delete(req.params.runId);
+      if (status !== "SUCCEEDED") return res.json({ status: "failed", message: "We couldn't read that profile — try again in a minute." });
+
+      const items: any[] = await (await fetch(`https://api.apify.com/v2/datasets/${run.data.defaultDatasetId}/items?token=${token}`)).json();
+      const profile = items.find((p) => String(p?.username || "").toLowerCase() === job.handle.toLowerCase());
+      if (!profile || profile.error) return res.json({ status: "failed", message: `We couldn't find @${job.handle} on Instagram. Check the spelling.` });
+      if (!String(profile.biography || "").toUpperCase().includes(job.code.toUpperCase())) {
+        return res.json({ status: "failed", message: `We didn't see ${job.code} in your bio yet. Save your bio on Instagram, wait a few seconds, then check again.` });
+      }
+      if (await findVerifiedOwner(job.handle, job.userId)) {
+        return res.json({ status: "failed", message: "That Instagram is already verified on another account." });
+      }
+      await storage.updateUser(job.userId, { instagramVerified: true, instagramVerifyCode: null, instagramVerifiedAt: new Date() } as any);
+      res.json({ status: "verified", handle: job.handle });
+    } catch (error) {
+      console.error("[instagram-verify] status:", error);
+      res.status(500).json({ message: "Couldn't check your bio" });
+    }
+  });
+
   app.post("/api/founding-signup", isAuthenticated, async (req: any, res) => {
     try {
       const b = req.body || {};
@@ -4131,7 +4240,7 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     if (!u) return u;
     const {
       password, emailVerificationToken, emailVerificationExpires, stripeCustomerId,
-      phone, birthdate, gender, faithNote, matchPreference, smsOptIn, matchupRequest,
+      phone, birthdate, gender, faithNote, matchPreference, smsOptIn, matchupRequest, instagramVerifyCode,
       ...safe
     } = u as any;
     return safe as T;
@@ -5009,6 +5118,21 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     if (await isAdminReq(req)) return next();
     return res.status(req.isAuthenticated && req.isAuthenticated() ? 403 : 401).json({ message: "Admin access required" });
   };
+
+  // Manual Instagram verification override (e.g. Apify couldn't read the profile)
+  app.patch("/api/admin/users/:id/instagram-verified", adminGuard, async (req: any, res) => {
+    try {
+      const verified = req.body?.verified === true;
+      const user: any = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (verified) {
+        if (!user.instagram) return res.status(400).json({ message: "This member hasn't added an Instagram handle" });
+        if (await findVerifiedOwner(user.instagram, user.id)) return res.status(409).json({ message: "That handle is already verified on another account" });
+      }
+      await storage.updateUser(user.id, { instagramVerified: verified, instagramVerifyCode: null, instagramVerifiedAt: verified ? new Date() : null } as any);
+      res.json({ ok: true, instagramVerified: verified });
+    } catch (e) { console.error("[instagram-verify] admin override", e); res.status(500).json({ message: "Failed to update verification" }); }
+  });
 
   app.get("/api/admin/venues", adminGuard, async (req, res) => {
     try {
