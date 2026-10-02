@@ -9,10 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
+import { ageFrom } from "@/lib/utils";
 import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users } from "lucide-react";
 
 const name = (m: any) => m?.displayName || [m?.firstName, m?.lastName].filter(Boolean).join(" ") || m?.username || "Member";
 const CIRCLE_STATUS = ["draft", "confirmed", "sent", "completed"];
+
+// "ages 24–31" across a circle's members (skips anyone without a birthdate)
+const ageRange = (members: any[]) => {
+  const ages = members.map((m) => ageFrom(m.birthdate)).filter((a): a is number => a !== null);
+  if (!ages.length) return null;
+  const lo = Math.min(...ages), hi = Math.max(...ages);
+  return lo === hi ? `age ${lo}` : `ages ${lo}–${hi}`;
+};
 
 export default function AdminMatchingPage() {
   const { user, isLoading } = useAuth();
@@ -117,12 +126,13 @@ export default function AdminMatchingPage() {
                      <div key={m.id} className="flex items-center gap-2 bg-gray-900/60 rounded-lg px-2 py-1.5">
                        <Avatar className="w-6 h-6"><AvatarImage src={getImageUrl(m.profileImageUrl)} /><AvatarFallback className="bg-gray-800 text-[9px]">{name(m)[0]}</AvatarFallback></Avatar>
                        <span className="text-xs text-white truncate flex-1">{name(m)}</span>
+                       {ageFrom(m.birthdate) !== null && <span className="text-[10px] text-gray-400 shrink-0">{ageFrom(m.birthdate)}</span>}
                        {m.city && <span className="text-[10px] text-gray-500 truncate max-w-[70px]">{m.city}</span>}
                        <button onClick={() => unassign.mutate({ circleId: c.id, userId: m.id })} className="text-gray-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                      </div>
                    ))}
                  </div>
-                 <p className="text-[10px] text-gray-600 mt-2">{(c.members || []).length} member{(c.members || []).length === 1 ? "" : "s"}</p>
+                 <p className="text-[10px] text-gray-600 mt-2">{[`${(c.members || []).length} member${(c.members || []).length === 1 ? "" : "s"}`, ageRange(c.members || [])].filter(Boolean).join(" · ")}</p>
                </div>
              ))}
            </div>}
@@ -134,12 +144,13 @@ export default function AdminMatchingPage() {
 
 function LeadCard({ lead, circles, onAssign }: { lead: any; circles: any[]; onAssign: (circleId: number) => void }) {
   const mr = lead.matchupRequest || {};
+  const age = ageFrom(lead.birthdate);
   return (
     <div className="rounded-lg border border-gray-800/60 bg-[#0A0A0A] p-3">
       <div className="flex items-center gap-2">
         <Avatar className="w-8 h-8"><AvatarImage src={getImageUrl(lead.profileImageUrl)} /><AvatarFallback className="bg-gray-800 text-xs">{name(lead)[0]}</AvatarFallback></Avatar>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-white truncate">{name(lead)}</p>
+          <p className="text-sm font-medium text-white truncate">{name(lead)}{age !== null && <span className="ml-1.5 text-xs font-normal text-gray-400">{age}</span>}</p>
           <p className="text-[11px] text-gray-500 truncate">{[lead.city, Array.isArray(lead.disciplines) ? lead.disciplines[0] : null].filter(Boolean).join(" · ") || "—"}</p>
         </div>
       </div>

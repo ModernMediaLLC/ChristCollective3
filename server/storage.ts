@@ -417,7 +417,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Members who have submitted a Matchup request (for manual matching by admins).
-  async getMatchupRequests(): Promise<Array<Pick<User, "id" | "firstName" | "lastName" | "username" | "email" | "phone" | "city" | "disciplines" | "interests" | "matchPreference" | "instagram" | "matchupRequest">>> {
+  async getMatchupRequests(): Promise<Array<Pick<User, "id" | "firstName" | "lastName" | "username" | "email" | "phone" | "birthdate" | "city" | "disciplines" | "interests" | "matchPreference" | "instagram" | "matchupRequest">>> {
     return await db
       .select({
         id: users.id,
@@ -426,6 +426,7 @@ export class DatabaseStorage implements IStorage {
         username: users.username,
         email: users.email,
         phone: users.phone,
+        birthdate: users.birthdate,
         city: users.city,
         disciplines: users.disciplines,
         interests: users.interests,
@@ -2039,7 +2040,7 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: users.id, firstName: users.firstName, lastName: users.lastName,
         displayName: users.displayName, username: users.username, email: users.email,
-        phone: users.phone, profileImageUrl: users.profileImageUrl,
+        phone: users.phone, profileImageUrl: users.profileImageUrl, birthdate: users.birthdate,
         city: users.city, disciplines: users.disciplines, interests: users.interests,
         matchPreference: users.matchPreference, instagram: users.instagram,
         onboardingCompleted: users.onboardingCompleted, matchupRequest: users.matchupRequest,
@@ -2060,6 +2061,7 @@ export class DatabaseStorage implements IStorage {
           id: users.id, firstName: users.firstName, lastName: users.lastName,
           displayName: users.displayName, username: users.username, profileImageUrl: users.profileImageUrl,
           city: users.city, disciplines: users.disciplines, phone: users.phone, email: users.email,
+          birthdate: users.birthdate,
         })
         .from(matchCircleMembers)
         .innerJoin(users, eq(users.id, matchCircleMembers.userId))

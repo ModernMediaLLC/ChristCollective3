@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CheckCircle, XCircle, Trash2, Clock, DollarSign, Users, Building, Receipt, UserCheck, Search, Eye, Calendar, Mail, X, Phone, MapPin, ExternalLink, ShoppingBag, Package, Crown, Shield, LayoutDashboard, FileText, Handshake, CreditCard, Coffee, Instagram, Sparkles } from "lucide-react";
 import { Link } from "wouter";
+import { ageFrom } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import type { Campaign, User, Donation, SponsorshipApplication, MembershipSubscription } from "@shared/schema";
@@ -39,6 +40,7 @@ type MatchupRequest = {
   username: string | null;
   email: string | null;
   phone: string | null;
+  birthdate: string | null;
   city: string | null;
   disciplines: string[] | null;
   interests: string[] | null;
@@ -1079,12 +1081,16 @@ function MatchupsSection({ matchupRequests, matchupsLoading }: { matchupRequests
 
       {matchupRequests.map((m) => {
         const req = m.matchupRequest || {};
+        const age = ageFrom(m.birthdate);
         return (
           <SectionCard key={m.id}>
             <div className="p-5">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                 <div className="min-w-0">
-                  <h3 className="text-lg font-bold text-white">{displayName(m)}</h3>
+                  <h3 className="text-lg font-bold text-white">
+                    {displayName(m)}
+                    <span className="ml-2 text-sm font-normal text-gray-400">{age !== null ? `${age} yrs` : "Age —"}</span>
+                  </h3>
                   {m.username && <p className="text-gray-600 text-xs">@{m.username}</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -8,7 +8,7 @@ import { buildApiUrl, getMobileAuthHeaders } from "@/lib/api-config";
 import InstagramVerify from "@/components/InstagramVerify";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, ageFrom } from "@/lib/utils";
 import { Check, ChevronLeft, CalendarClock, Coffee, Search, Cake, Sunrise, Sun, Moon, Camera } from "lucide-react";
 import { LA_CITIES } from "@/lib/laCities";
 import { trackMetaEvent, newMetaEventId } from "@/lib/metaPixel";
@@ -36,17 +36,6 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 function readableError(raw?: string): string {
   const body = (raw || "").replace(/^\d{3}:\s*/, "");
   try { return JSON.parse(body).message || body; } catch { return body; }
-}
-
-// Age in whole years from a YYYY-MM-DD string (null if incomplete/invalid)
-function ageFrom(iso: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return null;
-  const [y, mo, d] = [+m[1], +m[2], +m[3]];
-  const now = new Date();
-  let age = now.getFullYear() - y;
-  if (now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d)) age--;
-  return age;
 }
 
 const ORDER = ["intro", "register", "birthday", "city", "disciplines", "availability", "activity", "profile", "done"] as const;
