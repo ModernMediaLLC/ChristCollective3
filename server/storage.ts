@@ -277,10 +277,10 @@ export interface IStorage {
   
   // Direct message operations
   getOrCreateDirectChat(user1Id: string, user2Id: string): Promise<DirectChat>;
-  getUserDirectChats(userId: string): Promise<(DirectChat & { otherUser: User; lastMessage?: DirectMessage })[]>;
+  getUserDirectChats(userId: string): Promise<(DirectChat & { otherUser: ChatUser | null; lastMessage?: DirectMessage })[]>;
   createDirectMessage(messageData: InsertDirectMessage): Promise<DirectMessage>;
-  getDirectChatMessages(chatId: number): Promise<(DirectMessage & { sender: User })[]>;
-  markDirectMessageAsRead(messageId: number): Promise<void>;
+  getDirectChatMessages(chatId: number): Promise<(DirectMessage & { sender: ChatUser | null })[]>;
+  markDirectMessageAsRead(messageId: number, userId: string): Promise<void>;
   getUnreadDirectMessagesCount(userId: string): Promise<number>;
   
   // Password reset token operations
@@ -338,6 +338,17 @@ export interface IStorage {
   incrementCouponUsage(code: string): Promise<void>;
   seedCouponCode(code: string, discountPercent: number): Promise<void>;
 }
+
+// The only user fields a chat partner gets — never birthdate, phone, email, credentials, etc.
+const chatUserColumns = {
+  id: users.id,
+  username: users.username,
+  displayName: users.displayName,
+  firstName: users.firstName,
+  lastName: users.lastName,
+  profileImageUrl: users.profileImageUrl,
+};
+export type ChatUser = Pick<User, "id" | "username" | "displayName" | "firstName" | "lastName" | "profileImageUrl">;
 
 export class DatabaseStorage implements IStorage {
   // User operations
@@ -1473,19 +1484,15 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
-        stripeCustomerId: users.stripeCustomerId,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         bio: users.bio,
         location: users.location,
-        phone: users.phone,
         username: users.username,
-        password: users.password,
         userType: users.userType,
         showEmail: users.showEmail,
         showPhone: users.showPhone,
@@ -1501,19 +1508,15 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
-        stripeCustomerId: users.stripeCustomerId,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         bio: users.bio,
         location: users.location,
-        phone: users.phone,
         username: users.username,
-        password: users.password,
         userType: users.userType,
         showEmail: users.showEmail,
         showPhone: users.showPhone,
@@ -1851,20 +1854,16 @@ export class DatabaseStorage implements IStorage {
     return db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         displayName: users.displayName,
         profileImageUrl: users.profileImageUrl,
-        stripeCustomerId: users.stripeCustomerId,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         bio: users.bio,
         location: users.location,
-        phone: users.phone,
         username: users.username,
-        password: users.password,
         userType: users.userType,
         showEmail: users.showEmail,
         showPhone: users.showPhone,
@@ -1887,7 +1886,6 @@ export class DatabaseStorage implements IStorage {
     return db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         displayName: users.displayName,
@@ -1895,16 +1893,13 @@ export class DatabaseStorage implements IStorage {
         username: users.username,
         bio: users.bio,
         location: users.location,
-        phone: users.phone,
         userType: users.userType,
         showEmail: users.showEmail,
         showPhone: users.showPhone,
         showLocation: users.showLocation,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
-        stripeCustomerId: users.stripeCustomerId,
         isAdmin: users.isAdmin,
-        password: users.password,
       })
       .from(users)
       .innerJoin(groupChatMembers, eq(users.id, groupChatMembers.userId))
@@ -2183,19 +2178,15 @@ export class DatabaseStorage implements IStorage {
           displayName: users.displayName,
           profileImageUrl: users.profileImageUrl,
           username: users.username,
-          email: users.email,
           bio: users.bio,
           location: users.location,
-          phone: users.phone,
           userType: users.userType,
           showEmail: users.showEmail,
           showPhone: users.showPhone,
           showLocation: users.showLocation,
           createdAt: users.createdAt,
           updatedAt: users.updatedAt,
-          stripeCustomerId: users.stripeCustomerId,
           isAdmin: users.isAdmin,
-          password: users.password,
         }
       })
       .from(groupChatMessages)
@@ -2341,7 +2332,7 @@ export class DatabaseStorage implements IStorage {
     return newChat;
   }
 
-  async getUserDirectChats(userId: string): Promise<(DirectChat & { otherUser: User; lastMessage?: DirectMessage })[]> {
+  async getUserDirectChats(userId: string): Promise<(DirectChat & { otherUser: ChatUser | null; lastMessage?: DirectMessage })[]> {
     // Fetch chats first, then resolve otherUser with a simple eq() — avoids broken CASE JOIN
     const chats = await db
       .select()
@@ -2354,7 +2345,7 @@ export class DatabaseStorage implements IStorage {
         const otherUserId = chat.user1Id === userId ? chat.user2Id : chat.user1Id;
 
         const [otherUser] = await db
-          .select()
+          .select(chatUserColumns)
           .from(users)
           .where(eq(users.id, otherUserId))
           .limit(1);
@@ -2394,7 +2385,7 @@ export class DatabaseStorage implements IStorage {
 
       const otherUserId = chat.user1Id === userId ? chat.user2Id : chat.user1Id;
       const [otherUser] = await db
-        .select()
+        .select(chatUserColumns)
         .from(users)
         .where(eq(users.id, otherUserId))
         .limit(1);
@@ -2433,7 +2424,7 @@ export class DatabaseStorage implements IStorage {
     return message;
   }
 
-  async getDirectChatMessages(chatId: number): Promise<(DirectMessage & { sender: User })[]> {
+  async getDirectChatMessages(chatId: number): Promise<(DirectMessage & { sender: ChatUser | null })[]> {
     const messages = await db
       .select({
         id: directMessages.id,
@@ -2442,7 +2433,7 @@ export class DatabaseStorage implements IStorage {
         message: directMessages.message,
         readAt: directMessages.readAt,
         createdAt: directMessages.createdAt,
-        sender: users,
+        sender: chatUserColumns,
       })
       .from(directMessages)
       .leftJoin(users, eq(directMessages.senderId, users.id))
@@ -2452,11 +2443,14 @@ export class DatabaseStorage implements IStorage {
     return messages;
   }
 
-  async markDirectMessageAsRead(messageId: number): Promise<void> {
+  // Only the recipient (the other person in that chat) can mark a message read
+  async markDirectMessageAsRead(messageId: number, userId: string): Promise<void> {
+    const myChats = db.select({ id: directChats.id }).from(directChats)
+      .where(sql`${directChats.user1Id} = ${userId} OR ${directChats.user2Id} = ${userId}`);
     await db
       .update(directMessages)
       .set({ readAt: new Date() })
-      .where(eq(directMessages.id, messageId));
+      .where(and(eq(directMessages.id, messageId), ne(directMessages.senderId, userId), inArray(directMessages.chatId, myChats)));
   }
 
   async getUnreadDirectMessagesCount(userId: string): Promise<number> {

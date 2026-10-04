@@ -4257,9 +4257,11 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     const {
       password, emailVerificationToken, emailVerificationExpires, stripeCustomerId,
       phone, birthdate, gender, faithNote, matchPreference, smsOptIn, matchupRequest, instagramVerifyCode,
+      email, waitlisted,
       ...safe
     } = u as any;
-    return safe as T;
+    // email only when the member opted in via the "show email" privacy setting
+    return (safe.showEmail && email ? { ...safe, email } : safe) as T;
   };
 
   // Get all users for suggestions
@@ -5419,6 +5421,8 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
   app.get("/api/direct-chats/:id/messages", isAuthenticated, async (req: any, res) => {
     try {
       const chatId = parseInt(req.params.id);
+      // Only the two people in the chat can read it
+      if (!(await storage.getDirectChatById(chatId, req.user.id))) return res.status(404).json({ message: "Chat not found" });
       const messages = await storage.getDirectChatMessages(chatId);
       res.json(messages);
     } catch (error) {
@@ -5436,6 +5440,8 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
       if (!message || !message.trim()) {
         return res.status(400).json({ message: "Message cannot be empty" });
       }
+      // Only the two people in the chat can post to it
+      if (!(await storage.getDirectChatById(chatId, userId))) return res.status(404).json({ message: "Chat not found" });
 
       const newMessage = await storage.createDirectMessage({
         chatId,
@@ -5457,7 +5463,7 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
   app.patch("/api/direct-messages/:id/read", isAuthenticated, async (req: any, res) => {
     try {
       const messageId = parseInt(req.params.id);
-      await storage.markDirectMessageAsRead(messageId);
+      await storage.markDirectMessageAsRead(messageId, req.user.id);
       res.json({ message: "Message marked as read" });
     } catch (error) {
       console.error("Error marking message as read:", error);
