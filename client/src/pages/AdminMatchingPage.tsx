@@ -27,7 +27,8 @@ export default function AdminMatchingPage() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
   const [cycle, setCycle] = useState("current");
-  const [targetSize, setTargetSize] = useState(6);
+  const [circleSize, setCircleSize] = useState(8);
+  const [guides, setGuides] = useState(2);
 
   const enabled = user?.isAdmin === true;
   const { data: leads = [] } = useQuery<any[]>({ queryKey: ["/api/admin/leads"], enabled });
@@ -38,8 +39,15 @@ export default function AdminMatchingPage() {
   };
 
   const autoGroup = useMutation({
-    mutationFn: async () => apiRequest("/api/admin/matching/auto-group", { method: "POST", data: { cycle, targetSize } }),
-    onSuccess: async (r: any) => { const j = await r.json().catch(() => ({})); toast({ title: "Auto-grouped", description: `Created ${j.created ?? 0} circles from matchup requests.` }); invalidate(); },
+    mutationFn: async () => apiRequest("/api/admin/matching/auto-group", { method: "POST", data: { cycle, circleSize, guides } }),
+    onSuccess: async (r: any) => {
+      const j = await r.json().catch(() => ({}));
+      toast({
+        title: j.created ? `Created ${j.created} draft circle${j.created === 1 ? "" : "s"}` : "No group big enough yet",
+        description: `${j.placed ?? 0} placed · ${j.unmatched ?? 0} still unmatched. Drafts are only visible to admins.`,
+      });
+      invalidate();
+    },
     onError: () => toast({ title: "Couldn't auto-group", variant: "destructive" }),
   });
   const newCircle = useMutation({
@@ -83,7 +91,8 @@ export default function AdminMatchingPage() {
       {/* Toolbar */}
       <div className="px-5 py-4 border-b border-gray-900 flex flex-wrap items-end gap-3">
         <div><label className="text-[11px] text-gray-500 block mb-1">Cycle</label><Input value={cycle} onChange={(e) => setCycle(e.target.value)} className="h-9 w-32 bg-gray-900 border-gray-800 text-white" /></div>
-        <div><label className="text-[11px] text-gray-500 block mb-1">Circle size</label><Input type="number" value={targetSize} onChange={(e) => setTargetSize(Math.max(2, parseInt(e.target.value) || 6))} className="h-9 w-20 bg-gray-900 border-gray-800 text-white" /></div>
+        <div><label className="text-[11px] text-gray-500 block mb-1">Circle size</label><Input type="number" value={circleSize} onChange={(e) => setCircleSize(Math.max(3, parseInt(e.target.value) || 8))} className="h-9 w-20 bg-gray-900 border-gray-800 text-white" /></div>
+        <div><label className="text-[11px] text-gray-500 block mb-1">Guides</label><Input type="number" value={guides} onChange={(e) => setGuides(Math.max(0, parseInt(e.target.value) || 0))} className="h-9 w-20 bg-gray-900 border-gray-800 text-white" /></div>
         <Button onClick={() => autoGroup.mutate()} disabled={autoGroup.isPending} className="h-9 bg-[#D4AF37] text-black hover:bg-[#C4A030] font-semibold"><Wand2 className="w-4 h-4 mr-1.5" />{autoGroup.isPending ? "Grouping…" : "Auto-group"}</Button>
         <Button onClick={() => newCircle.mutate()} variant="outline" className="h-9 border-gray-700 text-white"><Plus className="w-4 h-4 mr-1.5" /> New circle</Button>
       </div>
@@ -92,7 +101,7 @@ export default function AdminMatchingPage() {
         {/* Unassigned pool */}
         <div className="lg:col-span-1">
           <h2 className="font-bold mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-[#D4AF37]" /> Unassigned <span className="text-xs text-gray-600">{unassigned.length}</span></h2>
-          <p className="text-xs text-gray-600 mb-3">Auto-group uses each lead's Matchup request (activity + time). Then move anyone into the right circle.</p>
+          <p className="text-xs text-gray-600 mb-3">Auto-group finds people who share a time window and an activity ("flexible" and "open to anything" match everything), keeps ages close, and fills each circle leaving room for guides. Circles start as drafts — members only see their circle once you set it to confirmed.</p>
           <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
             {unassigned.length === 0 && <p className="text-gray-600 text-sm">Everyone's placed 🎉</p>}
             {unassigned.map((l) => (
@@ -132,6 +141,7 @@ export default function AdminMatchingPage() {
                      </div>
                    ))}
                  </div>
+                 {c.notes && <p className="text-[10px] text-gray-500 mt-2">{c.notes}</p>}
                  <p className="text-[10px] text-gray-600 mt-2">{[`${(c.members || []).length} member${(c.members || []).length === 1 ? "" : "s"}`, ageRange(c.members || [])].filter(Boolean).join(" · ")}</p>
                </div>
              ))}

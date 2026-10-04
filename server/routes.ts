@@ -43,6 +43,7 @@ import { moderateContent } from "./services/moderationService";
 import { sendPushToUser } from "./pushNotifications";
 import { pool } from "./db";
 import { sendMetaEvent } from "./metaCapi";
+import { planCircles } from "./matching";
 
 // Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
@@ -5202,42 +5203,38 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     catch (e) { console.error("unassign", e); res.status(500).json({ message: "Failed to remove" }); }
   });
 
-  // Semi-manual matching algorithm: group leads (by matchup activity + time slot, then by city)
-  // into circles of ~targetSize. Admins refine by moving people afterwards.
+  // Auto-group: build draft circles from Matchup requests by shared time window + activity
+  // (flexible / open-to-anything match everything), tightest ages first. Each circle fills
+  // circleSize - guides member spots. Drafts are hidden from members until set to confirmed.
   app.post("/api/admin/matching/auto-group", adminGuard, async (req: any, res) => {
     try {
       const cycle = String(req.body?.cycle || "current");
-      const targetSize = Math.min(12, Math.max(2, parseInt(req.body?.targetSize) || 6));
-      const onlyRequests = req.body?.onlyRequests !== false;
+      const circleSize = Math.min(14, Math.max(3, parseInt(req.body?.circleSize) || 8));
+      const guides = Math.min(circleSize - 2, Math.max(0, parseInt(req.body?.guides) || 0));
+      const memberSlots = circleSize - guides;
+      const minMembers = Math.min(memberSlots, Math.max(2, parseInt(req.body?.minMembers) || Math.ceil(memberSlots * 2 / 3)));
       const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-      let leads = await storage.getLeads();
-      if (onlyRequests) leads = leads.filter((l: any) => l.matchupRequest && (l.matchupRequest as any).slot);
+      // Everyone with a request who isn't waitlisted and isn't already placed this cycle
+      const placed = new Set((await storage.getMatchCircles(cycle)).flatMap((c: any) => c.members.map((m: any) => m.id)));
+      const pool = (await storage.getLeads()).filter((l: any) => l.matchupRequest && !l.waitlisted && !placed.has(l.id));
 
-      const groups = new Map<string, any[]>();
-      for (const l of leads) {
-        const mr = (l.matchupRequest as any) || {};
-        const key = `${mr.activity || "any"}|${mr.slot || "any"}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(l);
+      const { circles, unmatchedIds } = planCircles(pool, { memberSlots, minMembers });
+      for (let i = 0; i < circles.length; i++) {
+        const c = circles[i];
+        const activity = c.activity === "open" ? "Open" : cap(c.activity);
+        const ages = c.ageRange ? ` · ages ${c.ageRange[0]}–${c.ageRange[1]}` : "";
+        const circle = await storage.createMatchCircle({
+          name: `${activity} · ${c.window} #${i + 1}`,
+          activity: c.activity === "open" ? null : c.activity,
+          slot: c.window,
+          area: "westside",
+          cycle,
+          notes: `${c.memberIds.length}/${memberSlots} members${ages}${guides ? ` · ${guides} guide spot${guides === 1 ? "" : "s"}` : ""}`,
+        } as any);
+        for (const id of c.memberIds) await storage.assignLeadToCircle(circle.id, id);
       }
-
-      let createdCount = 0;
-      for (const [key, members] of Array.from(groups.entries())) {
-        const [activity, slot] = key.split("|");
-        members.sort((a, b) => String(a.city || "").localeCompare(String(b.city || "")));
-        for (let i = 0; i < members.length; i += targetSize) {
-          const chunk = members.slice(i, i + targetSize);
-          const idx = Math.floor(i / targetSize) + 1;
-          const label = `${activity !== "any" ? cap(activity) : "Circle"}${slot !== "any" ? " · " + slot : ""} #${idx}`;
-          const circle = await storage.createMatchCircle({
-            name: label, activity: activity !== "any" ? activity : null, slot: slot !== "any" ? slot : null, area: "westside", cycle,
-          } as any);
-          for (const m of chunk) await storage.assignLeadToCircle(circle.id, m.id);
-          createdCount++;
-        }
-      }
-      res.json({ created: createdCount, circles: await storage.getMatchCircles(cycle) });
+      res.json({ created: circles.length, placed: circles.reduce((n, c) => n + c.memberIds.length, 0), unmatched: unmatchedIds.length, circles: await storage.getMatchCircles(cycle) });
     } catch (e) {
       console.error("auto-group", e);
       res.status(500).json({ message: "Failed to auto-group" });

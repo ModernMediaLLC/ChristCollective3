@@ -110,7 +110,7 @@ import {
   type UserBlock,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, or, ilike, like, sql, isNull, isNotNull, inArray } from "drizzle-orm";
+import { eq, ne, desc, asc, and, or, ilike, like, sql, isNull, isNotNull, inArray } from "drizzle-orm";
 import { generateSlug } from "./utils";
 
 // Interface for storage operations
@@ -2044,7 +2044,7 @@ export class DatabaseStorage implements IStorage {
         city: users.city, disciplines: users.disciplines, interests: users.interests,
         matchPreference: users.matchPreference, instagram: users.instagram,
         onboardingCompleted: users.onboardingCompleted, matchupRequest: users.matchupRequest,
-        createdAt: users.createdAt,
+        waitlisted: users.waitlisted, createdAt: users.createdAt,
       })
       .from(users)
       .where(or(eq(users.onboardingCompleted, true), isNotNull(users.matchupRequest)))
@@ -2100,11 +2100,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // A member's "meetups" = the match circles they belong to, with co-members + venue.
+  // Draft circles are admin-only (auto-group proposals) — members see a circle once it's confirmed.
   async getUserMeetups(userId: string) {
     const rows = await db.select({ circleId: matchCircleMembers.circleId }).from(matchCircleMembers).where(eq(matchCircleMembers.userId, userId));
     const ids = Array.from(new Set(rows.map((r) => r.circleId)));
     if (!ids.length) return [];
-    const circles = await db.select().from(matchCircles).where(inArray(matchCircles.id, ids)).orderBy(desc(matchCircles.createdAt));
+    const circles = await db.select().from(matchCircles)
+      .where(and(inArray(matchCircles.id, ids), ne(matchCircles.status, "draft")))
+      .orderBy(desc(matchCircles.createdAt));
     return Promise.all(circles.map(async (c) => {
       const members = await db
         .select({
