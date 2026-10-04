@@ -1,0 +1,53 @@
+Subject: An important update: your account security and our updated Privacy Policy
+
+Hi {{first_name}},
+
+We're writing with two updates: a privacy issue we found and fixed, and changes to our Privacy Policy and Terms of Service. We want you to hear about both directly from us.
+
+1. A PRIVACY ISSUE WE FIXED
+
+During a security review this week, we found that some parts of the app shared more member information than they should have. Until October 4, 2026:
+
+- Follower lists and group chat member lists could include other members' email addresses, phone numbers, and an encrypted (hashed) version of their password. Some of these could be viewed without logging in.
+- Group chat messages could be read by people who weren't in the chat.
+- Direct messages could be opened by other logged-in members, and they included profile details such as birthdate and email.
+
+We fixed all of this on October 4. Chats are now private to their members, and this information is no longer shared. We have no way to know for certain whether anyone viewed it, so we're asking everyone to take a few simple precautions.
+
+Passwords were never stored or shared in plain text. Even so, we recommend that you:
+
+- Reset your Christ Collective password: https://christcollective.com/auth?forgot=1
+- Change the password anywhere else you use the same one.
+- Watch for unexpected texts or emails that claim to be from us. We will never ask for your password.
+
+We're sorry. You trusted us with your information, and we take that seriously.
+
+2. UPDATES TO OUR PRIVACY POLICY AND TERMS
+
+We've grown a lot since our last update, so we refreshed both documents. In plain language, here's what's new:
+
+- Matchups. We use your availability, chosen activities, city, and age to place you in a circle with people at a similar stage of life. Matchups are 18+, so we ask for your birthday.
+- Your circle. Once your circle is confirmed, its members can see your name, photo, city, and creative fields. Your age, phone number, and email are never shown on your profile. Only our team uses them to coordinate meetups.
+- Guides. Some meetups include volunteer guides who help the group get started. Guides aren't security or professional staff, so please keep using good judgment when you meet people.
+- Texts. Matchups are coordinated by text, so you'll need to opt in to SMS to be matched. You don't need it to use the rest of Christ Collective. Reply STOP at any time.
+- Photos and video. We sometimes photograph or film meetups and events and share them in the app, on social media, and in ads. If you'd rather not be filmed, just tell your guide. You can also ask us to stop using existing photos of you.
+- Ads and Meta. When you sign up on our website, we share limited, encrypted information with Meta (Facebook/Instagram) so we can see which ads bring new members. We don't sell your information.
+- Instagram verification. If you verify your Instagram, a trusted service reads your public profile to check the code you added.
+- Directory listings. Business and ministry listings, including any contact details you enter, are public.
+
+YOUR CHOICES
+
+- Opt out of ad sharing: turn on Global Privacy Control in your browser, or email privacy@christcollective.com with "Do Not Share" in the subject line.
+- Access, correct, or delete your information: email privacy@christcollective.com.
+- Manage notifications in your app settings.
+
+Read the full documents:
+Privacy Policy: https://christcollective.com/privacy
+Terms of Service: https://christcollective.com/terms
+
+By continuing to use Christ Collective, you agree to the updated Terms and Privacy Policy.
+
+Thank you for being part of this community. If you have any questions or concerns, just reply to this email or write to privacy@christcollective.com. A real person will get back to you.
+
+Grace and peace,
+The Christ Collective Team

@@ -25,7 +25,7 @@ export default function AuthExperience({ variant = "desktop", onLoginSuccess }: 
   const [, setLocation] = useLocation();
   const { loginMutation, registerMutation } = useAuth();
   const { toast } = useToast();
-  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(() => new URLSearchParams(window.location.search).has("forgot"));
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [mode, setMode] = useState<"login" | "register">("login");
   const [verificationSent, setVerificationSent] = useState(false);

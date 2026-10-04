@@ -8,8 +8,11 @@ export default function AuthPage() {
   const [location, setLocation] = useLocation();
   const { user, isLoading } = useAuth();
 
-  const urlRedirect = new URLSearchParams(window.location.search).get('redirect');
+  const params = new URLSearchParams(window.location.search);
+  const urlRedirect = params.get('redirect');
   const redirectTo = urlRedirect || localStorage.getItem('authRedirect') || '/';
+  // /auth?forgot=1 (linked from member emails) opens "Forgot password" — even for members who are already signed in
+  const forgot = params.has('forgot');
 
   useEffect(() => {
     if (urlRedirect) {
@@ -18,11 +21,11 @@ export default function AuthPage() {
   }, [urlRedirect]);
 
   useEffect(() => {
-    if (!isLoading && user) {
+    if (!isLoading && user && !forgot) {
       localStorage.removeItem('authRedirect');
       setLocation(redirectTo);
     }
-  }, [isLoading, user, setLocation, redirectTo]);
+  }, [isLoading, user, setLocation, redirectTo, forgot]);
 
   if (isLoading) {
     return (
