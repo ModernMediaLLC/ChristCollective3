@@ -31,6 +31,8 @@ export async function sendMetaEvent(opts: {
   const token = process.env.META_CAPI_TOKEN;
   if (!token) return;
   const { req, user } = opts;
+  // Browser sent Global Privacy Control (a California "do not sell or share" opt-out) — send nothing to Meta
+  if (req.headers["sec-gpc"] === "1") return;
 
   const user_data: Record<string, unknown> = {
     client_ip_address: String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim() || undefined,

@@ -12,9 +12,12 @@ declare global {
 
 let loaded = false;
 
+// Global Privacy Control = a browser-level "do not sell or share" opt-out we must honor under California law
+export const hasGlobalPrivacyControl = () => typeof navigator !== "undefined" && (navigator as any).globalPrivacyControl === true;
+
 export function initMetaPixel() {
   // ?preview=1 is the internal walkthrough of /join — keep it out of Meta's data
-  if (loaded || !META_PIXEL_ID || !isWeb() || new URLSearchParams(window.location.search).has("preview")) return;
+  if (loaded || !META_PIXEL_ID || !isWeb() || hasGlobalPrivacyControl() || new URLSearchParams(window.location.search).has("preview")) return;
   loaded = true;
   // Standard Meta base snippet
   const n: any = (window.fbq = function (...args: any[]) {
