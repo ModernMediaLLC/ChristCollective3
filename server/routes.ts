@@ -3207,6 +3207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin endpoint to populate creator's Recent Content with real YouTube videos
   app.post('/api/admin/populate-creator-content/:creatorId', isAuthenticated, async (req: any, res) => {
+    if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
     try {
       const { creatorId } = req.params;
       const { channelHandle } = req.body;
@@ -4963,19 +4964,24 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     }
   });
 
-  app.get("/api/group-chats/active", async (req, res) => {
+  // Members only see chats they belong to (admins see all)
+  const isGroupChatMember = async (chatId: number, user: any) =>
+    !!user?.isAdmin || (await storage.getChatMembers(chatId)).some((m: any) => m.id === user?.id);
+
+  app.get("/api/group-chats/active", isAuthenticated, async (req: any, res) => {
     try {
       const chats = await storage.listActiveChats();
-      res.json(chats);
+      res.json(req.user.isAdmin ? chats : chats.filter((c: any) => (c.members || []).some((m: any) => m.id === req.user.id)));
     } catch (error) {
       console.error("Error fetching active chats:", error);
       res.status(500).json({ message: "Failed to fetch active chats" });
     }
   });
 
-  app.get("/api/group-chats/:id/members", async (req, res) => {
+  app.get("/api/group-chats/:id/members", isAuthenticated, async (req: any, res) => {
     try {
       const chatId = parseInt(req.params.id);
+      if (!(await isGroupChatMember(chatId, req.user))) return res.status(404).json({ message: "Chat not found" });
       const members = await storage.getChatMembers(chatId);
       res.json(members);
     } catch (error) {
@@ -4984,9 +4990,10 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     }
   });
 
-  app.get("/api/group-chats/:id/messages", async (req, res) => {
+  app.get("/api/group-chats/:id/messages", isAuthenticated, async (req: any, res) => {
     try {
       const chatId = parseInt(req.params.id);
+      if (!(await isGroupChatMember(chatId, req.user))) return res.status(404).json({ message: "Chat not found" });
       const messages = await storage.getChatMessages(chatId);
       res.json(messages);
     } catch (error) {
@@ -5315,6 +5322,8 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     try {
       const chatId = parseInt(req.params.id);
       const userId = req.user.id;
+      // Only members can post (posting also pushes a notification to everyone in the chat)
+      if (!(await isGroupChatMember(chatId, req.user))) return res.status(404).json({ message: "Chat not found" });
 
       const result = insertGroupChatMessageSchema.safeParse({
         ...req.body,
@@ -5362,6 +5371,7 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
 
   // Admin route to make all users follow Christ Collective Ministry
   app.post("/api/admin/auto-follow-christ-collective", isAuthenticated, async (req: any, res) => {
+    if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
     try {
       await storage.makeAllUsersFollowChristCollective();
       res.json({ message: "Successfully made all users follow Christ Collective Ministry" });
