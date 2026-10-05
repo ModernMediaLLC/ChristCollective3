@@ -6,9 +6,12 @@
  *   npx tsx --env-file=.env tools/send_member_email.ts <slug> --test you@x.com   # one copy to you (no database needed)
  *   npx tsx --env-file=.env tools/send_member_email.ts <slug> --send             # everyone — resumable, safe to re-run
  *
+ * Options: --audience admins   only accounts with admin access (default: all members)
+ *          --reply-to x@y.com  where replies go (default: privacy@christcollective.com)
+ *
  * Template: tools/emails/<slug>.html + <slug>.txt. The .txt starts with "Subject: ...".
  * Both may use {{first_name}}. Log: .tmp/member-email-<slug>.jsonl — re-runs skip anyone already sent.
- * --send refuses to run if the privacy@ contact domain can't receive mail (no MX records).
+ * --send refuses to run if the reply-to address's domain can't receive mail (no MX records).
  */
 import fs from "fs";
 import path from "path";
@@ -18,14 +21,17 @@ import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 
 const FROM = "Christ Collective <contact@christcollective.info>";
-const REPLY_TO = "privacy@christcollective.com";
+const flag = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined);
+const REPLY_TO = flag("--reply-to") || "privacy@christcollective.com";
+const AUDIENCE = flag("--audience") || "members";
 const BATCH = 100;          // Resend batch limit
 const PAUSE_MS = 700;       // stay under Resend's default 2 requests/second
 
-const [slug, ...rest] = process.argv.slice(2);
-const testTo = rest.includes("--test") ? rest[rest.indexOf("--test") + 1] : undefined;
-const sendAll = rest.includes("--send");
-if (!slug) { console.error("usage: tools/send_member_email.ts <slug> [--test you@x.com | --send]"); process.exit(1); }
+const [slug] = process.argv.slice(2);
+const testTo = flag("--test");
+const sendAll = process.argv.includes("--send");
+if (!slug || slug.startsWith("--")) { console.error("usage: tools/send_member_email.ts <slug> [--test you@x.com | --send] [--audience admins] [--reply-to x@y.com]"); process.exit(1); }
+if (!["members", "admins"].includes(AUDIENCE)) { console.error(`unknown --audience ${AUDIENCE} (members | admins)`); process.exit(1); }
 
 const dir = path.join("tools", "emails");
 const html = fs.readFileSync(path.join(dir, `${slug}.html`), "utf8");
@@ -62,7 +68,7 @@ async function main() {
   neonConfig.webSocketConstructor = ws;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const { rows } = await pool.query(
-    `select email, first_name, display_name, username from users where email is not null and email like '%@%'`,
+    `select email, first_name, display_name, username from users where email is not null and email like '%@%'${AUDIENCE === "admins" ? " and is_admin = true" : ""}`,
   );
   await pool.end();
 
@@ -84,14 +90,14 @@ async function main() {
   const todo = Array.from(recipients).filter(([email]) => !sent.has(email));
 
   console.log(`subject: "${subject}"`);
-  console.log(`${recipients.size} members with an email · ${sent.size} already sent · ${todo.length} to send`);
+  console.log(`${recipients.size} ${AUDIENCE} with an email · ${sent.size} already sent · ${todo.length} to send · replies → ${REPLY_TO}`);
   if (!sendAll) {
     const mask = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
     console.log("sample:", todo.slice(0, 5).map(([e, n]) => `${n} <${mask(e)}>`).join(", "));
     console.log("preview only — nothing sent. Add --test you@x.com for a test copy, or --send to email everyone.");
     return;
   }
-  if (!mailOk) throw new Error(`refusing to --send: ${REPLY_TO} can't receive replies or "Do Not Share" requests yet`);
+  if (!mailOk) throw new Error(`refusing to --send: ${REPLY_TO} can't receive replies yet`);
 
   for (let i = 0; i < todo.length; i += BATCH) {
     const chunk = todo.slice(i, i + BATCH);

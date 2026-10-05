@@ -1,0 +1,42 @@
+Subject: You now have admin access to Christ Collective
+
+Hi {{first_name}},
+
+You've been given admin access to Christ Collective. Thank you for helping lead this community. Here's how to get in, what you can do, and a few ground rules.
+
+HOW TO GET TO THE ADMIN DASHBOARD
+
+- In the app or on the website: tap your profile picture in the top-right corner, then tap "Admin Dashboard".
+- On a computer: go to https://christcollective.com/admin
+
+You need to be logged in to your own account. If you don't see "Admin Dashboard" yet, log out and log back in.
+
+WHAT YOU CAN DO
+
+Matchups and circles
+- Matchup Requests: see who wants to be matched, with their availability, chosen activities, age, and contact details.
+- Matching CRM (https://christcollective.com/admin/matching): press "Auto-group" to build draft circles from people who share a time and an activity, with ages kept close. Each circle leaves room for 2 guides by default. Move people between circles, then set a circle to "confirmed" when it's ready.
+- Venues (https://christcollective.com/admin/venues): the directory of places our circles can meet.
+
+Community and safety
+- Moderation (https://christcollective.com/admin/moderation): review flagged posts and member reports.
+- Delete any post: tap the "..." menu on a post, then "Delete Post (admin)".
+- Users: look up any member and see their details. You can freeze an account (they can still browse but can't post, comment, or message), ban it (they're locked out), reactivate it, or give or remove admin access.
+
+Approvals
+- Ministries: approve or reject new ministry profiles before they go public.
+- Pending Campaigns: approve fundraising campaigns.
+- Sponsorships: review sponsorship applications.
+- Transactions and Members: view donations, payments, and paid memberships.
+
+GROUND RULES
+
+- Protect members' privacy. You can now see private details like age, phone number, and email. Use them only to run Christ Collective. Never share, screenshot, export, or use them to contact people for anything personal.
+- Confirm circles carefully. Members see their circle in the app as soon as you set it to "confirmed", so check the group before you confirm it.
+- Check with the team before you ban someone or give anyone admin access, unless it's an urgent safety issue.
+- Keep your account secure. Use a strong password that you don't use anywhere else, and never share your login.
+
+Questions? Just reply to this email.
+
+Grace and peace,
+The Christ Collective Team
