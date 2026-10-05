@@ -194,6 +194,19 @@ export default function AdminDashboard() {
     onError: handleMutationError,
   });
 
+  const roleMutation = useMutation({
+    mutationFn: async ({ userId, isAdmin }: { userId: string; isAdmin: boolean }) => {
+      const res = await apiRequest(`/api/admin/users/${userId}/role`, { method: "PATCH", data: { isAdmin } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "Failed to update admin access"); }
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setSelectedUser((u) => (u ? ({ ...u, isAdmin: vars.isAdmin } as any) : u));
+      toast({ title: vars.isAdmin ? "Admin access granted" : "Admin access removed" });
+    },
+    onError: handleMutationError,
+  });
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -593,6 +606,17 @@ export default function AdminDashboard() {
                     )}
                   </>
                 )}
+                {selectedUser.id !== user?.id && (selectedUser.isAdmin ? (
+                  <Button size="sm" variant="outline" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white" disabled={roleMutation.isPending}
+                    onClick={() => { if (confirm(`Remove admin access from ${getUserDisplayName(selectedUser)}?`)) roleMutation.mutate({ userId: selectedUser.id, isAdmin: false }); }}>
+                    <Shield className="h-3.5 w-3.5 mr-1.5" /> Remove admin
+                  </Button>
+                ) : (selectedUser as any).accountStatus === "active" && (
+                  <Button size="sm" variant="outline" className="border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37]/10" disabled={roleMutation.isPending}
+                    onClick={() => { if (confirm(`Make ${getUserDisplayName(selectedUser)} (@${selectedUser.username}) an admin?\n\nAdmins can see every member's age, phone and email, manage matchups, and freeze or ban accounts.`)) roleMutation.mutate({ userId: selectedUser.id, isAdmin: true }); }}>
+                    <Shield className="h-3.5 w-3.5 mr-1.5" /> Make admin
+                  </Button>
+                ))}
               </div>
             </div>
           </DialogContent>

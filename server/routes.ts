@@ -3525,6 +3525,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Grant or remove admin access. Admins can see members' contact details and ages and moderate accounts.
+  app.patch('/api/admin/users/:id/role', isAdminAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const isAdmin = req.body?.isAdmin;
+      if (typeof isAdmin !== "boolean") return res.status(400).json({ message: "isAdmin must be true or false" });
+      if (id === req.user.id) return res.status(400).json({ message: "You can't change your own admin access." });
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ message: "User not found" });
+      if (isAdmin && (target as any).accountStatus !== "active") {
+        return res.status(400).json({ message: "Reactivate this account before making it an admin." });
+      }
+      await storage.updateUser(id, { isAdmin } as any);
+      console.log(`[admin-role] ${req.user.id} set isAdmin=${isAdmin} for ${id}`);
+      res.json({ id, isAdmin });
+    } catch (error) {
+      console.error("Error updating admin role:", error);
+      res.status(500).json({ message: "Failed to update admin access" });
+    }
+  });
+
   // Admin: Get user details by ID
   app.get('/api/admin/users/:id', isAdminAuth, async (req, res) => {
     try {
