@@ -44,6 +44,7 @@ import { sendPushToUser } from "./pushNotifications";
 import { pool } from "./db";
 import { sendMetaEvent } from "./metaCapi";
 import { planCircles } from "./matching";
+import { registerTextingRoutes } from "./texting";
 
 // Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
@@ -5165,6 +5166,9 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
     return res.status(req.isAuthenticated && req.isAuthenticated() ? 403 : 401).json({ message: "Admin access required" });
   };
 
+  // Conversations tab: member texts through Blooio, grouped by match circle
+  registerTextingRoutes(app, adminGuard);
+
   // Manual Instagram verification override (e.g. Apify couldn't read the profile)
   app.patch("/api/admin/users/:id/instagram-verified", adminGuard, async (req: any, res) => {
     try {
@@ -5245,9 +5249,12 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
       const minMembers = Math.min(memberSlots, Math.max(2, parseInt(req.body?.minMembers) || Math.ceil(memberSlots * 2 / 3)));
       const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-      // Everyone with a request who isn't waitlisted and isn't already placed this cycle
+      // Everyone with a request who isn't waitlisted and isn't already placed this cycle. People in a
+      // locked-in circle (leaders assigned, or confirmed/sent) in any cycle are left alone too.
       const placed = new Set((await storage.getMatchCircles(cycle)).flatMap((c: any) => c.members.map((m: any) => m.id)));
-      const pool = (await storage.getLeads()).filter((l: any) => l.matchupRequest && !l.waitlisted && !placed.has(l.id));
+      const locked = new Set((await storage.getMatchCircles()).filter((c: any) => c.leaders || ["confirmed", "sent"].includes(c.status))
+        .flatMap((c: any) => c.members.map((m: any) => m.id)));
+      const pool = (await storage.getLeads()).filter((l: any) => l.matchupRequest && !l.waitlisted && !placed.has(l.id) && !locked.has(l.id));
 
       const { circles, unmatchedIds } = planCircles(pool, { memberSlots, minMembers });
       for (let i = 0; i < circles.length; i++) {

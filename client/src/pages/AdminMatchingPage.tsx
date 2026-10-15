@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
 import { ageFrom } from "@/lib/utils";
-import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare } from "lucide-react";
 
 const name = (m: any) => m?.displayName || [m?.firstName, m?.lastName].filter(Boolean).join(" ") || m?.username || "Member";
 const CIRCLE_STATUS = ["draft", "confirmed", "sent", "completed"];
@@ -86,6 +86,7 @@ export default function AdminMatchingPage() {
           <h1 className="text-lg font-bold">Matching CRM</h1>
           <p className="text-xs text-gray-500">{leads.length} leads · {circles.length} circles · cycle "{cycle}"</p>
         </div>
+        <Link href="/admin/conversations"><Button variant="outline" className="h-9 border-gray-700 text-white"><MessagesSquare className="w-4 h-4 mr-1.5" />Conversations</Button></Link>
       </header>
 
       {/* Toolbar */}

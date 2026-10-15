@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CheckCircle, XCircle, Trash2, Clock, DollarSign, Users, Building, Receipt, UserCheck, Search, Eye, Calendar, Mail, X, Phone, MapPin, ExternalLink, ShoppingBag, Package, Crown, Shield, LayoutDashboard, FileText, Handshake, CreditCard, Coffee, Instagram, Sparkles } from "lucide-react";
+import { CheckCircle, XCircle, Trash2, Clock, DollarSign, Users, Building, Receipt, UserCheck, Search, Eye, Calendar, Mail, X, Phone, MapPin, ExternalLink, ShoppingBag, Package, Crown, Shield, LayoutDashboard, FileText, Handshake, CreditCard, Coffee, Instagram, Sparkles, MessagesSquare } from "lucide-react";
 import { Link } from "wouter";
 import { ageFrom } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -317,6 +317,12 @@ export default function AdminDashboard() {
               <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all">
                 <Sparkles className="h-4 w-4 shrink-0" />
                 <span className="flex-1 text-left">Matching CRM</span>
+              </button>
+            </Link>
+            <Link href="/admin/conversations">
+              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all">
+                <MessagesSquare className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left">Conversations</span>
               </button>
             </Link>
             <Link href="/admin/venues">

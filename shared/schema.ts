@@ -874,6 +874,8 @@ export const matchCircles = pgTable("match_circles", {
   cycle: varchar("cycle"),                            // e.g. "2026-W35" grouping label
   status: varchar("status").notNull().default("draft"), // draft, confirmed, sent, completed
   notes: text("notes"),
+  leaders: varchar("leaders"),                        // team members leading it, e.g. "Luis + EZ"
+  groupChatId: varchar("group_chat_id"),              // Blooio chat id once the circle's group text exists
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -881,8 +883,27 @@ export const matchCircleMembers = pgTable("match_circle_members", {
   id: serial("id").primaryKey(),
   circleId: integer("circle_id").notNull().references(() => matchCircles.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rsvp: varchar("rsvp"),                              // null (not set), confirmed, declined, opted_out
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Texts sent and received through Blooio (iMessage/SMS), mirrored here so the admin Conversations
+// tab can show them by circle. chat_id is Blooio's: "+1..." for one person, a comma list for a group.
+export const textMessages = pgTable("text_messages", {
+  id: serial("id").primaryKey(),
+  chatId: varchar("chat_id").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  circleId: integer("circle_id").references(() => matchCircles.id, { onDelete: "set null" }),
+  direction: varchar("direction").notNull(),          // outbound, inbound
+  body: text("body").notNull().default(""),
+  status: varchar("status"),                          // queued, sent, delivered, failed, received
+  protocol: varchar("protocol"),                      // imessage, sms
+  blooioMessageId: varchar("blooio_message_id").unique(),
+  sentBy: varchar("sent_by"),                         // admin user id, for texts sent from the CRM
+  error: text("error"),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type TextMessage = typeof textMessages.$inferSelect;
 export const insertMatchCircleSchema = createInsertSchema(matchCircles)
   .omit({ id: true, status: true, createdAt: true, updatedAt: true })
   .extend({ name: z.string().min(1).max(160) });
