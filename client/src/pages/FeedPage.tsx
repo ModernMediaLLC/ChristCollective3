@@ -169,8 +169,8 @@ export default function FeedPage() {
 
       <div className="max-w-lg mx-auto px-4 py-4">
         <div className="space-y-4">
-          <OnboardingChecklist user={user} />
           {user && <MeetupBanner />}
+          <OnboardingChecklist user={user} />
           <WordOfTheDayCard />
 
           {allPosts.length === 0 ? (

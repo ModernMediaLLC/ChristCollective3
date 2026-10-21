@@ -2094,10 +2094,15 @@ export class DatabaseStorage implements IStorage {
     await db.delete(matchCircleMembers).where(and(eq(matchCircleMembers.circleId, circleId), eq(matchCircleMembers.userId, userId)));
   }
 
-  // A member's "meetups" = the match circles they belong to, with co-members + venue.
-  // Draft circles are admin-only (auto-group proposals) — members see a circle once it's confirmed.
+  // A member's "meetups" = the match circles they're going to, with who else is going + the venue.
+  // Draft circles are admin-only (auto-group proposals, circles still being polled): members see a
+  // circle once it's confirmed, and only if they said yes (RSVPs are marked from the poll replies), so
+  // someone who declined or never answered doesn't get it. Only member-safe fields go out — the
+  // circle's notes and group-chat id are admin-only.
   async getUserMeetups(userId: string) {
-    const rows = await db.select({ circleId: matchCircleMembers.circleId }).from(matchCircleMembers).where(eq(matchCircleMembers.userId, userId));
+    const going = eq(matchCircleMembers.rsvp, "confirmed");
+    const rows = await db.select({ circleId: matchCircleMembers.circleId }).from(matchCircleMembers)
+      .where(and(eq(matchCircleMembers.userId, userId), going));
     const ids = Array.from(new Set(rows.map((r) => r.circleId)));
     if (!ids.length) return [];
     const circles = await db.select().from(matchCircles)
@@ -2112,14 +2117,16 @@ export class DatabaseStorage implements IStorage {
         })
         .from(matchCircleMembers)
         .innerJoin(users, eq(users.id, matchCircleMembers.userId))
-        .where(eq(matchCircleMembers.circleId, c.id));
+        .where(and(eq(matchCircleMembers.circleId, c.id), going));
       let venue: any = null;
       if (c.venueId) {
-        const [v] = await db.select({ id: venues.id, name: venues.name, imageUrl: venues.imageUrl, neighborhood: venues.neighborhood, activityType: venues.activityType })
-          .from(venues).where(eq(venues.id, c.venueId));
+        const [v] = await db.select({
+          id: venues.id, name: venues.name, imageUrl: venues.imageUrl, neighborhood: venues.neighborhood,
+          activityType: venues.activityType, address: venues.address, mapUrl: venues.mapUrl,
+        }).from(venues).where(eq(venues.id, c.venueId));
         venue = v || null;
       }
-      return { ...c, members, venue };
+      return { id: c.id, activity: c.activity, slot: c.slot, area: c.area, status: c.status, leaders: c.leaders, createdAt: c.createdAt, members, venue };
     }));
   }
 

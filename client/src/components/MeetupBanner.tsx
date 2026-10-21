@@ -6,7 +6,7 @@ import { getImageUrl } from "@/lib/api-config";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check } from "lucide-react";
+import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check, Navigation } from "lucide-react";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   coffee: "Coffee", hiking: "Hiking", hike: "Hiking", run: "Run", running: "Run", book: "Book Club",
@@ -15,6 +15,9 @@ const ACTIVITY_LABEL: Record<string, string> = {
 const prettyActivity = (a?: string | null) => (a ? (ACTIVITY_LABEL[a.toLowerCase()] || a.charAt(0).toUpperCase() + a.slice(1)) : "Meetup");
 const memberName = (m: any) => m?.displayName || [m?.firstName, m?.lastName].filter(Boolean).join(" ") || m?.username || "Member";
 const isUpcoming = (c: any) => c.status !== "completed";
+const hosts = (leaders?: string | null) => (leaders ? leaders.replace(/\s*\+\s*/g, " & ") : "");
+const mapsUrl = (v: any): string | null =>
+  v?.mapUrl || (v?.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([v.name, v.address].filter(Boolean).join(", "))}` : null);
 
 export function MeetupBanner() {
   const { user } = useAuth();
@@ -75,42 +78,65 @@ export function MeetupBanner() {
     );
   }
 
-  // ── State C: has meetups ── show the most relevant (upcoming first, else most recent)
+  // ── State C: has meetups ── show the most relevant (upcoming first, else most recent), with the
+  // details right on the card: when, where (+ directions), who's hosting, who's going.
   const relevant = circles.find(isUpcoming) || circles[0];
   const upcoming = isUpcoming(relevant);
-  const others = (relevant.members || []).filter((m: any) => m.id !== user.id);
+  const going = relevant.members || [];
+  const others = going.filter((m: any) => m.id !== user.id);
+  const venue = relevant.venue;
+  const directions = upcoming ? mapsUrl(venue) : null;
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full text-left rounded-2xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#1a1506] to-[#0A0A0A] p-4 flex items-center gap-3 hover:border-[#D4AF37]/50 transition-colors"
-      >
-        <div className="w-12 h-12 rounded-xl overflow-hidden bg-[#D4AF37]/15 flex items-center justify-center shrink-0">
-          {relevant.venue?.imageUrl
-            ? <img src={relevant.venue.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-            : <Coffee className="w-5 h-5 text-[#D4AF37]" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">{upcoming ? "Your next meetup" : "Your last meetup"}</p>
-          <p className="text-white font-semibold text-sm truncate">
-            {prettyActivity(relevant.activity)}{relevant.slot ? ` · ${relevant.slot}` : ""}
-          </p>
-          <div className="flex items-center gap-2 mt-1.5">
-            <div className="flex -space-x-2">
-              {others.slice(0, 5).map((m: any) => (
-                <Avatar key={m.id} className="w-6 h-6 border-2 border-[#0A0A0A]">
-                  <AvatarImage src={getImageUrl(m.profileImageUrl)} />
-                  <AvatarFallback className="bg-gray-800 text-[9px]">{memberName(m)[0]}</AvatarFallback>
-                </Avatar>
-              ))}
-              {others.length > 5 && <span className="w-6 h-6 rounded-full bg-gray-800 border-2 border-[#0A0A0A] flex items-center justify-center text-[9px] text-white">+{others.length - 5}</span>}
-            </div>
-            <span className="text-xs text-gray-500 truncate">{relevant.venue?.name || `${others.length} ${others.length === 1 ? "person" : "people"}`}</span>
+      <div className="rounded-2xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#1a1506] to-[#0A0A0A] overflow-hidden">
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full text-left p-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors"
+        >
+          <div className="w-12 h-12 rounded-xl overflow-hidden bg-[#D4AF37]/15 flex items-center justify-center shrink-0">
+            {venue?.imageUrl
+              ? <img src={venue.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+              : <Coffee className="w-5 h-5 text-[#D4AF37]" />}
           </div>
-        </div>
-        <ChevronRight className="w-5 h-5 text-gray-500 shrink-0" />
-      </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">{upcoming ? "Your next meetup" : "Your last meetup"}</p>
+            <p className="text-white font-semibold text-sm">
+              {prettyActivity(relevant.activity)}{relevant.slot ? ` · ${relevant.slot}` : ""}
+            </p>
+            {venue?.name && (
+              <p className="text-xs text-gray-300 mt-1 flex items-start gap-1">
+                <MapPin className="w-3.5 h-3.5 text-[#D4AF37] mt-px shrink-0" />
+                <span>{venue.name}{venue.address && <span className="text-gray-500"> · {venue.address}</span>}</span>
+              </p>
+            )}
+            {relevant.leaders && <p className="text-xs text-gray-400 mt-0.5">Hosted by {hosts(relevant.leaders)}</p>}
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex -space-x-2">
+                {others.slice(0, 5).map((m: any) => (
+                  <Avatar key={m.id} className="w-6 h-6 border-2 border-[#0A0A0A]">
+                    <AvatarImage src={getImageUrl(m.profileImageUrl)} />
+                    <AvatarFallback className="bg-gray-800 text-[9px]">{memberName(m)[0]}</AvatarFallback>
+                  </Avatar>
+                ))}
+                {others.length > 5 && <span className="w-6 h-6 rounded-full bg-gray-800 border-2 border-[#0A0A0A] flex items-center justify-center text-[9px] text-white">+{others.length - 5}</span>}
+              </div>
+              <span className="text-xs text-gray-500 truncate">{going.length} {upcoming ? "going" : "came"}</span>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-500 shrink-0 self-center" />
+        </button>
+        {directions && (
+          <a
+            href={directions}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 border-t border-[#D4AF37]/15 py-2.5 text-xs font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/5 transition-colors"
+          >
+            <Navigation className="w-3.5 h-3.5" /> Get directions
+          </a>
+        )}
+      </div>
 
       <MeetupsDialog open={open} onOpenChange={setOpen} circles={circles} selfId={user.id} navigate={navigate} />
     </>
@@ -182,7 +208,13 @@ function MeetupRow({ c, selfId, onMember }: { c: any; selfId: string; onMember: 
         <p className="text-sm font-semibold text-white">{prettyActivity(c.activity)}{c.slot ? ` · ${c.slot}` : ""}</p>
         {c.status && c.status !== "draft" && <span className="text-[10px] text-gray-500 capitalize">{c.status}</span>}
       </div>
-      {c.venue?.name && <p className="text-xs text-gray-400 flex items-center gap-1 mb-2"><MapPin className="w-3 h-3 text-[#D4AF37]" />{c.venue.name}</p>}
+      {c.venue?.name && (
+        <p className="text-xs text-gray-400 flex items-start gap-1 mb-1">
+          <MapPin className="w-3 h-3 text-[#D4AF37] mt-0.5 shrink-0" />
+          <span>{c.venue.name}{c.venue.address && ` · ${c.venue.address}`}</span>
+        </p>
+      )}
+      {c.leaders && <p className="text-[11px] text-gray-500 mb-2">Hosted by {hosts(c.leaders)}</p>}
       <div className="flex flex-wrap gap-2">
         {others.map((m: any) => (
           <button key={m.id} onClick={() => onMember(m)} className="flex items-center gap-1.5 bg-gray-800/60 rounded-full pl-1 pr-2.5 py-1 hover:bg-gray-800">
@@ -192,6 +224,11 @@ function MeetupRow({ c, selfId, onMember }: { c: any; selfId: string; onMember: 
         ))}
         {others.length === 0 && <span className="text-xs text-gray-600">Your circle is forming…</span>}
       </div>
+      {isUpcoming(c) && mapsUrl(c.venue) && (
+        <a href={mapsUrl(c.venue)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-[#D4AF37] hover:underline">
+          <Navigation className="w-3 h-3" /> Get directions
+        </a>
+      )}
     </div>
   );
 }
