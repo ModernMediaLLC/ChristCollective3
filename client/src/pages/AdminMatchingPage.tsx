@@ -11,16 +11,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
 import { ageFrom } from "@/lib/utils";
 import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare } from "lucide-react";
-import { formatDate, formatRange, isPaused, upcomingBlackouts } from "@shared/matchup";
+import { formatDate, formatRange, isPaused, nextCircleOf, upcomingBlackouts } from "@shared/matchup";
 
-// What a member set on their Meetup preferences page that matters for matching: paused, and dates they can't make
+// What a member set on their Meetup preferences page that matters for matching: paused, dates they can't make,
+// and who they'd like to meet next ("mix", the default, isn't shown)
 function PrefsFlags({ mr, compact }: { mr: any; compact?: boolean }) {
-  const paused = isPaused(mr), off = upcomingBlackouts(mr);
-  if (!paused && !off.length) return null;
+  const paused = isPaused(mr), off = upcomingBlackouts(mr), next = nextCircleOf(mr);
+  if (!paused && !off.length && next === "mix") return null;
   const offText = off.map(formatRange).join(", ");
   return (
     <>
       {paused && <Badge className="bg-gray-700/40 text-gray-300 border border-gray-600 text-[10px] shrink-0">Paused{mr.resumeOn ? ` until ${formatDate(mr.resumeOn)}` : ""}</Badge>}
+      {next !== "mix" && <Badge className="bg-sky-500/10 text-sky-300 border border-sky-500/30 text-[10px] shrink-0">{next === "same" ? "Same circle" : "New people"}</Badge>}
       {off.length > 0 && (compact
         ? <Badge title={`Can't make: ${offText}`} className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] shrink-0">{off.length} blocked</Badge>
         : <span className="w-full text-[10px] text-amber-300/90">Can't make: {offText}</span>)}

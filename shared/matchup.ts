@@ -4,6 +4,7 @@
 //   paused        left out of grouping and circle texts until they turn it back on…
 //   resumeOn      …or until this date (YYYY-MM-DD, LA time), when matching picks them up again by itself
 //   blackouts     dates they can't make: [{ from, to }] (YYYY-MM-DD, inclusive)
+//   nextCircle    who they'd like to meet next round, once they've been in a circle (see NEXT_CIRCLE)
 // Shared by the API, the member's preferences page, the admin CRM and the grouping tools.
 
 export const WINDOW_DAYS = ["Weekday", "Saturday", "Sunday"] as const;
@@ -14,6 +15,13 @@ export const MATCHUP_ACTIVITIES = ["coffee", "create", "hiking", "run", "serve",
 export const MAX_BLACKOUTS = 24;
 
 export type Blackout = { from: string; to: string };
+
+// "same" keeps them with the people from their last circle who also picked "same"; "new" keeps them apart
+// from everyone they've met; "mix" (the default, also when unset) is happy either way.
+export const NEXT_CIRCLE = ["same", "mix", "new"] as const;
+export type NextCircle = (typeof NEXT_CIRCLE)[number];
+export const nextCircleOf = (mr: any): NextCircle =>
+  (NEXT_CIRCLE as readonly string[]).includes(mr?.nextCircle) ? mr.nextCircle : "mix";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export const isIsoDate = (s: unknown): s is string => typeof s === "string" && ISO.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));

@@ -45,7 +45,7 @@ import { pool } from "./db";
 import { sendMetaEvent } from "./metaCapi";
 import { planCircles } from "./matching";
 import { registerTextingRoutes } from "./texting";
-import { FLEXIBLE, MATCHUP_ACTIVITIES, MATCHUP_WINDOWS, MAX_BLACKOUTS, isIsoDate, isPaused, laToday } from "@shared/matchup";
+import { FLEXIBLE, MATCHUP_ACTIVITIES, MATCHUP_WINDOWS, MAX_BLACKOUTS, NEXT_CIRCLE, isIsoDate, isPaused, laToday } from "@shared/matchup";
 
 // Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
@@ -396,7 +396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // A member's Matchup preferences (see shared/matchup.ts): weekly times, activities, paused / resume date,
-  // and blocked-out dates. Only the fields sent are changed. Joining here for the first time needs the
+  // blocked-out dates, and who they'd like to meet next round. Only the fields sent are changed. Joining here for the first time needs the
   // same texting consent as /join, plus times and activities.
   app.patch("/api/matchups/preferences", isAuthenticated, async (req: any, res) => {
     try {
@@ -422,6 +422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!acts.length) return res.status(400).json({ message: "Pick at least one activity." });
         next.activities = acts;
         next.activity = acts[0];
+      }
+      if (b.nextCircle !== undefined) {
+        if (!(NEXT_CIRCLE as readonly string[]).includes(b.nextCircle)) return res.status(400).json({ message: "Invalid choice for your next circle" });
+        next.nextCircle = b.nextCircle;
       }
       if (b.blackouts !== undefined) {
         if (!Array.isArray(b.blackouts)) return res.status(400).json({ message: "Invalid dates" });

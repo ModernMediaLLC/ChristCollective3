@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, Check, Sunrise, Sun, Moon, X, PauseCircle, PlayCircle } from "lucide-react";
+import { ChevronLeft, Check, Sunrise, Sun, Moon, X, PauseCircle, PlayCircle, Users, Shuffle, UserPlus } from "lucide-react";
 import { Helmet } from "react-helmet";
-import { FLEXIBLE, WINDOW_DAYS, WINDOW_TIMES, formatDate, formatRange, isPaused, laToday, upcomingBlackouts, type Blackout } from "@shared/matchup";
+import { FLEXIBLE, WINDOW_DAYS, WINDOW_TIMES, formatDate, formatRange, isPaused, laToday, nextCircleOf, upcomingBlackouts, type Blackout, type NextCircle } from "@shared/matchup";
 
-// Meetup preferences: stay in the loop or pause (optionally until a date), the weekly times that work,
-// dates they can't make, and what they'd like to do. Saved into their matchupRequest (shared/matchup.ts);
+// Meetup preferences: stay in the loop or pause (optionally until a date), who they'd like to meet next (once
+// they've been in a circle), the weekly times that work, dates they can't make, and what they'd like to do.
+// Saved into their matchupRequest (shared/matchup.ts);
 // the grouping tools skip paused members and never offer anyone a date they blocked out.
 
 const DAY_LABEL: Record<string, string> = { Weekday: "Weekdays", Saturday: "Sat", Sunday: "Sun" };
@@ -53,6 +54,7 @@ export default function MatchupsPage() {
   const [availability, setAvailability] = useState<string[]>([]);
   const [activities, setActivities] = useState<string[]>([]);
   const [blackouts, setBlackouts] = useState<Blackout[]>([]);
+  const [nextCircle, setNextCircle] = useState<NextCircle>("mix");
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
 
@@ -65,13 +67,14 @@ export default function MatchupsPage() {
     setAvailability(Array.isArray(mr.availability) ? mr.availability : []);
     setActivities(Array.isArray(mr.activities) ? mr.activities : mr.activity ? [mr.activity] : []);
     setBlackouts(upcomingBlackouts(mr, today));
+    setNextCircle(nextCircleOf(mr));
     setReady(true);
   }, [mr, ready, today]);
 
   const save = useMutation({
     mutationFn: async () => apiRequest("/api/matchups/preferences", {
       method: "PATCH",
-      data: { paused, resumeOn: paused && untilDate ? resumeOn : null, availability, activities, blackouts },
+      data: { paused, resumeOn: paused && untilDate ? resumeOn : null, availability, activities, blackouts, nextCircle },
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/meetups"] });
@@ -168,6 +171,19 @@ export default function MatchupsPage() {
             </div>
           )}
         </Section>
+
+        {(data?.circles || []).length > 0 && (
+          <Section title="Your next circle" sub="After a meetup, who would you like to meet next time?">
+            <div className="space-y-2">
+              <Choice on={nextCircle === "same"} onClick={() => setNextCircle("same")} Icon={Users} title="Keep my circle"
+                sub="Meet again with the same people. You'll stay with everyone from your circle who picks this too." />
+              <Choice on={nextCircle === "mix"} onClick={() => setNextCircle("mix")} Icon={Shuffle} title="Mix it up"
+                sub="Happy either way: some familiar faces, some new ones." />
+              <Choice on={nextCircle === "new"} onClick={() => setNextCircle("new")} Icon={UserPlus} title="Meet new people"
+                sub="A fresh circle with people you haven't met yet." />
+            </div>
+          </Section>
+        )}
 
         <Section title="Times that usually work" sub="Pick every time you can usually make. We choose meetup dates from these.">
           <div className="rounded-2xl border border-gray-800 bg-[#0A0A0A] p-3">
