@@ -26,16 +26,22 @@ const ageRange = (members: any[]) => {
 export default function AdminMatchingPage() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
-  const [cycle, setCycle] = useState("current");
+  const [picked, setPicked] = useState<string | null>(null);
   const [circleSize, setCircleSize] = useState(8);
   const [guides, setGuides] = useState(2);
 
   const enabled = user?.isAdmin === true;
   const { data: leads = [] } = useQuery<any[]>({ queryKey: ["/api/admin/leads"], enabled });
-  const { data: circles = [], isLoading: circlesLoading } = useQuery<any[]>({ queryKey: [`/api/admin/match-circles?cycle=${cycle}`], enabled });
+  // Every circle, so the Cycle menu lists the cycles that exist (newest first) and opens on the newest one
+  const { data: allCircles = [], isLoading: circlesLoading } = useQuery<any[]>({ queryKey: ["/api/admin/match-circles"], enabled });
+  const cycleOf = (c: any) => c.cycle || "current";
+  const cycles = Array.from(new Set(allCircles.map(cycleOf)));
+  if (picked && !cycles.includes(picked)) cycles.unshift(picked); // a new cycle, no circles yet
+  const cycle = picked ?? cycles[0] ?? "current";
+  const circles = allCircles.filter((c) => cycleOf(c) === cycle);
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/admin/match-circles?cycle=${cycle}`] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/match-circles"] });
   };
 
   const autoGroup = useMutation({
@@ -91,7 +97,22 @@ export default function AdminMatchingPage() {
 
       {/* Toolbar */}
       <div className="px-5 py-4 border-b border-gray-900 flex flex-wrap items-end gap-3">
-        <div><label className="text-[11px] text-gray-500 block mb-1">Cycle</label><Input value={cycle} onChange={(e) => setCycle(e.target.value)} className="h-9 w-32 bg-gray-900 border-gray-800 text-white" /></div>
+        <div>
+          <label className="text-[11px] text-gray-500 block mb-1">Cycle</label>
+          <select
+            value={cycle}
+            onChange={(e) => {
+              if (e.target.value !== "__new") return setPicked(e.target.value);
+              const n = window.prompt("Name the new cycle, e.g. nov-2026")?.trim();
+              if (n) setPicked(n);
+            }}
+            className="h-9 bg-gray-900 border border-gray-800 rounded-md text-sm text-white px-2"
+          >
+            {cycles.length === 0 && <option value="current">current (0)</option>}
+            {cycles.map((c) => <option key={c} value={c}>{c} ({allCircles.filter((x) => cycleOf(x) === c).length})</option>)}
+            <option value="__new">+ New cycle…</option>
+          </select>
+        </div>
         <div><label className="text-[11px] text-gray-500 block mb-1">Circle size</label><Input type="number" value={circleSize} onChange={(e) => setCircleSize(Math.max(3, parseInt(e.target.value) || 8))} className="h-9 w-20 bg-gray-900 border-gray-800 text-white" /></div>
         <div><label className="text-[11px] text-gray-500 block mb-1">Guides</label><Input type="number" value={guides} onChange={(e) => setGuides(Math.max(0, parseInt(e.target.value) || 0))} className="h-9 w-20 bg-gray-900 border-gray-800 text-white" /></div>
         <Button onClick={() => autoGroup.mutate()} disabled={autoGroup.isPending} className="h-9 bg-[#D4AF37] text-black hover:bg-[#C4A030] font-semibold"><Wand2 className="w-4 h-4 mr-1.5" />{autoGroup.isPending ? "Grouping…" : "Auto-group"}</Button>
