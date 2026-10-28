@@ -1,17 +1,23 @@
 /**
  * Auto-group founding signups into meetup circles by where they live, then pick each circle's
  * meeting zone (the spot that minimizes total travel) and the time window most members can make.
- * Read-only: queries the database, writes nothing back.
+ * Each circle also gets a suggested leader pair and two dates in the target week, from the windows
+ * that both the members and that pair can make. Read-only: queries the database, writes nothing back.
+ * tools/save_circles.ts puts the result into the Matching CRM.
  *
  * Run from the repo root:
  *   npx tsx --env-file=.env tools/group_signups.ts                # summary to the console
- *   npx tsx --env-file=.env tools/group_signups.ts --since 2026-09-28 --span 12 --max 8
+ *   npx tsx --env-file=.env tools/group_signups.ts --lock 16 --week 2026-11-02
  *
  * Options: --since YYYY-MM-DD  only signups on/after this date (default 2026-09-28, the ad launch)
  *          --span N            max miles between any two members of a starting cluster (default 12)
  *          --stretch N         members farther than this from the meeting zone are flagged (default 10)
  *          --far N             members farther than this from every zone are held, not grouped (default 20)
  *          --min N / --max N   smallest cluster that becomes a circle / largest circle (default 3 / 8)
+ *          --lock 16,17        circles that are set: their members are left out of the grouping
+ *          --week YYYY-MM-DD   Monday of the week to suggest dates in (default 2026-11-02)
+ *          --weekdays Wed,Thu  the two weekdays offered for weekday circles (default Wed,Thu: Tue Nov 3 2026 is Election Day)
+ *          --pair-max N        most circles one leader pair takes that week (default 2)
  *
  * Output: .tmp/signup-groups.json (full detail, contains member names — do not commit).
  * Distances are straight-line miles between city centers; LA drive times run longer.
@@ -20,6 +26,8 @@
 import fs from "fs";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
+import { isBlackedOut, isPaused } from "../shared/matchup";
+import { leaderNamesFor } from "../server/leaders";
 
 const flag = (name: string, dflt: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : dflt);
 const SINCE = flag("--since", "2026-09-28");
@@ -28,6 +36,21 @@ const STRETCH = Number(flag("--stretch", "10"));
 const FAR = Number(flag("--far", "20"));
 const MIN = Number(flag("--min", "3"));
 const MAX = Number(flag("--max", "8"));
+const LOCK = flag("--lock", "").split(",").map(Number).filter(Boolean);
+const WEEK = flag("--week", "2026-11-02");
+const WEEKDAYS = flag("--weekdays", "Wed,Thu").split(",");
+const PAIR_MAX = Number(flag("--pair-max", "2"));
+
+
+// Leader pairs and the windows each can make (Luis, Oct 13: Mario weekends; Miguel weekdays after 6pm +
+// some weekends; Jonathan later weekdays or weekends; Luis + EZ flexible. Oct 21: Ronaldo Wed + Thu all
+// day, Sat/Sun/Mon before 1pm only — so Mario + Ronaldo overlap on Saturday mornings alone, Sunday
+// mornings being church). young = both in their early 20s, so they're steered toward younger circles.
+const PAIRS = [
+  { leaders: "Luis + EZ", young: false, windows: null as string[] | null },
+  { leaders: "Jonathan + Miguel", young: false, windows: ["Weekday evenings", "Saturday mornings", "Saturday afternoons", "Saturday evenings", "Sunday afternoons", "Sunday evenings"] },
+  { leaders: "Mario + Ronaldo", young: true, windows: ["Saturday mornings"] },
+];
 
 type LatLng = [number, number];
 // City / neighborhood centers. The first block is every city seen in signups; the second adds
@@ -42,7 +65,11 @@ const PLACES: Record<string, LatLng> = {
   "La Cañada Flintridge": [34.1992, -118.1879], "Pasadena": [34.1478, -118.1445], "Duarte": [34.1395, -117.9773],
   "Pomona": [34.0551, -117.7500], "Montebello": [34.0165, -118.1138], "Norwalk": [33.9022, -118.0817],
   "Downey": [33.9401, -118.1332], "La Habra": [33.9319, -117.9461], "Santa Clarita": [34.3917, -118.5426],
-  "Lancaster": [34.6868, -118.1542], "Palmdale": [34.5794, -118.1165],
+  "Lancaster": [34.6868, -118.1542], "Palmdale": [34.5794, -118.1165], "Torrance": [33.8358, -118.3406],
+  "Cerritos": [33.8583, -118.0648], "San Fernando": [34.2819, -118.4390], "Playa Vista": [33.9757, -118.4180],
+  "Palms": [34.0220, -118.4045], "Canoga Park": [34.2011, -118.5981], "Mid-City": [34.0416, -118.3531],
+  "Beverly Hills": [34.0736, -118.4004], "Lakewood": [33.8536, -118.1339], "Anaheim": [33.8366, -117.9143],
+  "Santa Barbara": [34.4208, -119.6982],
 };
 const ZONE_NAMES: Record<string, LatLng> = {
   ...PLACES,
@@ -67,7 +94,7 @@ const SLOTS = [
 // Tie-break order when two windows fit the same number of people.
 const SLOT_PREF = ["Saturday mornings", "Weekday evenings", "Saturday afternoons", "Sunday afternoons", "Weekday afternoons", "Weekday mornings", "Saturday evenings", "Sunday evenings", "Sunday mornings"];
 
-interface Member { id: string; name: string; age: number | null; city: string; pos: LatLng; approx: boolean; slots: Set<string>; flexible: boolean; activities: string[]; waitlisted: boolean; }
+interface Member { id: string; name: string; age: number | null; city: string; pos: LatLng; approx: boolean; slots: Set<string>; flexible: boolean; activities: string[]; waitlisted: boolean; blackouts: { from: string; to: string }[]; }
 
 const miles = (a: LatLng, b: LatLng) => {
   const rad = Math.PI / 180, dLat = (b[0] - a[0]) * rad, dLng = (b[1] - a[1]) * rad;
@@ -87,7 +114,9 @@ function meetingPoint(pts: LatLng[]): LatLng {
   return c;
 }
 
-const nearestZone = (c: LatLng) => Object.entries(ZONE_NAMES).map(([name, pos]) => ({ name, d: miles(c, pos) })).sort((a, b) => a.d - b.d)[0];
+// "Los Angeles" is where members who didn't name a neighborhood are placed, so it never names a zone
+const nearestZone = (c: LatLng) => Object.entries(ZONE_NAMES).filter(([name]) => name !== "Los Angeles")
+  .map(([name, pos]) => ({ name, d: miles(c, pos) })).sort((a, b) => a.d - b.d)[0];
 
 function expandSlots(raw: string[]): { slots: Set<string>; flexible: boolean } {
   const slots = new Set<string>(); let flexible = false;
@@ -104,6 +133,63 @@ function expandSlots(raw: string[]): { slots: Set<string>; flexible: boolean } {
 
 const slotCounts = (ms: Member[]) => SLOTS.map((slot) => ({ slot, n: ms.filter((m) => m.slots.has(slot)).length }))
   .sort((a, b) => b.n - a.n || SLOT_PREF.indexOf(a.slot) - SLOT_PREF.indexOf(b.slot));
+
+// Dates in the target week: weekday windows on the two WEEKDAYS, weekend windows on their own day.
+// No Sunday mornings (church).
+const TIME: Record<string, string> = { mornings: "10am", afternoons: "1:30pm", evenings: "6:30pm" };
+const DAY: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+const dayLabel = (offset: number) => {
+  const d = new Date(`${WEEK}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).replace(",", "");
+};
+const isoDay = (offset: number) => {
+  const d = new Date(`${WEEK}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+};
+// Free for a date = it's one of their weekly windows and they haven't blocked that day out
+const canMake = (m: Member, window: string, date: string) => m.slots.has(window) && !isBlackedOut(m, date);
+type DateOption = { label: string; window: string; date: string; n: number; order: number };
+function pickDates(ms: Member[], windows: string[]): DateOption[] {
+  const choices: DateOption[] = [];
+  for (const w of windows) {
+    const [day, part] = w.split(" ");
+    if (day === "Sunday" && part === "mornings") continue;
+    for (const d of day === "Weekday" ? WEEKDAYS : [day.slice(0, 3)]) {
+      const date = isoDay(DAY[d]);
+      choices.push({ label: `${dayLabel(DAY[d])}, ${TIME[part]}`, window: w, date, n: ms.filter((m) => canMake(m, w, date)).length, order: DAY[d] * 10 + Object.keys(TIME).indexOf(part) });
+    }
+  }
+  return choices.sort((a, b) => b.n - a.n || SLOT_PREF.indexOf(a.window) - SLOT_PREF.indexOf(b.window) || a.order - b.order)
+    .slice(0, 2).sort((a, b) => a.order - b.order);
+}
+
+// Give each circle a leader pair (at most PAIR_MAX circles per pair) so the most members can make one of
+// the pair's two dates. Small enough to try every assignment.
+function assignPairs(circles: Member[][]) {
+  const median = (c: Member[]) => { const a = c.map((m) => m.age).filter((x): x is number => x !== null).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
+  const fit = circles.map((c) => PAIRS.map((p) => {
+    const dates = pickDates(c, p.windows ?? SLOTS);
+    const med = median(c);
+    return { dates, score: dates.reduce((s, o) => s + o.n, 0) + (p.young && med !== null ? (med <= 35 ? 1 : med >= 45 ? -1 : 0) : 0) };
+  }));
+  let best = { score: -1, pick: [] as number[] };
+  const pick: number[] = [], load = PAIRS.map(() => 0);
+  const go = (i: number, score: number) => {
+    if (i === circles.length) { if (score > best.score) best = { score, pick: [...pick] }; return; }
+    for (let p = -1; p < PAIRS.length; p++) { // -1: no pair has room
+      if (p >= 0 && load[p] >= PAIR_MAX) continue;
+      if (p >= 0) load[p]++;
+      pick.push(p);
+      go(i + 1, score + (p >= 0 ? fit[i][p].score : 0));
+      pick.pop();
+      if (p >= 0) load[p]--;
+    }
+  };
+  go(0, 0);
+  return best.pick.map((p, i) => (p >= 0 ? { leaders: PAIRS[p].leaders, dates: fit[i][p].dates } : { leaders: null, dates: pickDates(circles[i], SLOTS) }));
+}
 
 // Complete-linkage clustering: keep merging the two closest clusters while every pair stays within SPAN miles.
 function cluster(ms: Member[]): Member[][] {
@@ -162,16 +248,27 @@ async function main() {
   neonConfig.webSocketConstructor = ws;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const { rows } = await pool.query(
-    `select id, first_name, birthdate, city, waitlisted, matchup_request from users
+    `select id, username, first_name, birthdate, city, waitlisted, matchup_request from users
      where matchup_request is not null and coalesce(is_admin, false) = false and email not like '%@example.com'`,
   );
+  const locked = LOCK.length ? (await pool.query(
+    `select c.id, c.name, coalesce(array_agg(m.user_id) filter (where m.user_id is not null), '{}') as ids
+       from match_circles c left join match_circle_members m on m.circle_id = c.id where c.id = any($1::int[]) group by c.id`, [LOCK],
+  )).rows : [];
   await pool.end();
+  const lockedIds = new Set<string>(locked.flatMap((c: any) => c.ids));
 
-  const members: Member[] = [], unknownCity: string[] = [];
+  const members: Member[] = [], unknownCity: string[] = [], paused: string[] = [];
   for (const r of rows) {
+    if (lockedIds.has(r.id)) continue;
+    // Team accounts that signed up through /join like members lead circles instead (every account in
+    // server/leaders.ts, plus LEADER_ACCOUNTS from the env). Admins are already left out above.
+    if (leaderNamesFor(r.username).length) continue;
     const mr = r.matchup_request || {};
     if (String(mr.requestedAt || "") < SINCE) continue;
     const name = String(r.first_name || "").trim().split(/\s+/)[0] || "(no name)";
+    // Paused their meetups (preferences page): out of this round until they turn it back on
+    if (isPaused(mr)) { paused.push(mr.resumeOn ? `${name} (until ${mr.resumeOn})` : name); continue; }
     const city = String(r.city || "").trim();
     if (!PLACES[city]) { unknownCity.push(`${name} — "${city}"`); continue; }
     const { slots, flexible } = expandSlots(Array.isArray(mr.availability) ? mr.availability : String(mr.slot || "").split(","));
@@ -179,6 +276,7 @@ async function main() {
     members.push({
       id: r.id, name, age, city, pos: PLACES[city], approx: city === "Los Angeles", slots, flexible,
       activities: Array.isArray(mr.activities) ? mr.activities : [mr.activity || "open"], waitlisted: !!r.waitlisted,
+      blackouts: Array.isArray(mr.blackouts) ? mr.blackouts : [],
     });
   }
 
@@ -195,8 +293,26 @@ async function main() {
     else held.push({ m, nearest: ranked.length ? nearestZone(centers[ranked[0].i]).name : "—", d: ranked.length ? ranked[0].d : 0 });
   }
   const circles = cores.flatMap((c) => (c.length > MAX ? splitByTime(c) : [c]));
+  let pairs = assignPairs(circles);
 
-  const out = circles.map((c) => {
+  // Anyone who can't make either of their circle's dates moves to the nearest other circle whose dates they
+  // can make, if it's within STRETCH miles and stays at MAX + 1 or fewer (some invitees always drop out).
+  // Then leaders and dates are picked again for the new circles.
+  const moved: { name: string; from: string; to: string }[] = [];
+  const hubs = circles.map((c) => meetingPoint(c.map((m) => m.pos)));
+  for (let i = 0; i < circles.length; i++) for (const m of [...circles[i]]) {
+    if (pairs[i].dates.some((d) => canMake(m, d.window, d.date))) continue;
+    const to = circles.map((c, j) => ({ j, d: miles(hubs[j], m.pos) }))
+      .filter(({ j, d }) => j !== i && d <= STRETCH && circles[j].length <= MAX && pairs[j].dates.some((dt) => canMake(m, dt.window, dt.date)))
+      .sort((a, b) => a.d - b.d)[0];
+    if (!to) continue;
+    circles[i].splice(circles[i].indexOf(m), 1);
+    circles[to.j].push(m);
+    moved.push({ name: m.name, from: nearestZone(hubs[i]).name, to: nearestZone(hubs[to.j]).name });
+  }
+  if (moved.length) pairs = assignPairs(circles);
+
+  const out = circles.map((c, ci) => {
     const center = meetingPoint(c.map((m) => m.pos));
     const zone = nearestZone(center);
     const counts = slotCounts(c);
@@ -204,41 +320,49 @@ async function main() {
     for (const m of c) for (const a of m.activities) acts[a] = (acts[a] || 0) + 1;
     const dist = c.map((m) => miles(center, m.pos));
     const ages = c.map((m) => m.age).filter((a): a is number => a !== null).sort((a, b) => a - b);
+    const { leaders, dates } = pairs[ci];
     return {
       zone: zone.name, center, size: c.length,
       ages: ages.length ? { youngest: ages[0], oldest: ages[ages.length - 1], median: ages[Math.floor(ages.length / 2)] } : null,
       avgMiles: +(dist.reduce((s, d) => s + d, 0) / c.length).toFixed(1), maxMiles: +Math.max(...dist).toFixed(1),
       bestSlot: counts[0], nextSlot: counts[1], activities: Object.entries(acts).sort((a, b) => b[1] - a[1]),
+      leaders, dates: dates.map(({ label, window, n }) => ({ label, window, n })), slot: dates.map((d) => d.label).join(" or "),
       members: c.map((m, i) => ({
-        name: m.name, age: m.age, city: m.city, lat: m.pos[0], lng: m.pos[1], miles: +dist[i].toFixed(1),
+        id: m.id, name: m.name, age: m.age, city: m.city, lat: m.pos[0], lng: m.pos[1], miles: +dist[i].toFixed(1),
         stretch: dist[i] > STRETCH, approx: m.approx, flexible: m.flexible, canMakeBest: m.slots.has(counts[0].slot),
+        canMake: dates.map((d) => canMake(m, d.window, d.date)),
         slots: m.flexible ? ["flexible"] : Array.from(m.slots), activities: m.activities,
       })).sort((a, b) => a.miles - b.miles),
     };
   }).sort((a, b) => b.size - a.size);
 
   const result = {
-    generatedAt: new Date().toISOString(), since: SINCE, settings: { SPAN, STRETCH, FAR, MIN, MAX },
+    generatedAt: new Date().toISOString(), since: SINCE, settings: { SPAN, STRETCH, FAR, MIN, MAX, WEEK, WEEKDAYS, PAIR_MAX },
+    locked: locked.map((c: any) => ({ id: c.id, name: c.name, members: c.ids.length })), moved,
     grouped: out.reduce((s, c) => s + c.size, 0), circles: out,
     held: held.map((h) => ({ name: h.m.name, city: h.m.city, lat: h.m.pos[0], lng: h.m.pos[1], nearestZone: h.nearest, miles: +h.d.toFixed(1) })),
     waitlist: members.filter((m) => m.waitlisted).map((m) => {
       const near = out.map((c) => ({ zone: c.zone, d: miles(c.center as LatLng, m.pos) })).sort((a, b) => a.d - b.d)[0];
       return { name: m.name, city: m.city, lat: m.pos[0], lng: m.pos[1], nearestZone: near?.zone, miles: near ? +near.d.toFixed(1) : null };
     }),
-    availability: slotCounts(pool_), flexible: pool_.filter((m) => m.flexible).length, unknownCity,
+    availability: slotCounts(pool_), flexible: pool_.filter((m) => m.flexible).length, unknownCity, paused,
   };
   fs.mkdirSync(".tmp", { recursive: true });
   fs.writeFileSync(".tmp/signup-groups.json", JSON.stringify(result, null, 1));
 
+  if (locked.length) console.log(`Locked (members left out): ${locked.map((c: any) => `#${c.id} ${c.name} (${c.ids.length})`).join("; ")}`);
   console.log(`${members.length} signups since ${SINCE} → ${result.grouped} grouped into ${out.length} circles, ${held.length} held, ${result.waitlist.length} waitlisted`);
   for (const c of out) {
     console.log(`\n${c.zone} — ${c.size} people · meet near ${c.center.map((n) => n.toFixed(4)).join(", ")} · avg ${c.avgMiles} mi, max ${c.maxMiles} mi`);
     if (c.ages) console.log(`  ages ${c.ages.youngest}–${c.ages.oldest}, median ${c.ages.median}`);
     console.log(`  best: ${c.bestSlot.slot} (${c.bestSlot.n}/${c.size}) · next: ${c.nextSlot.slot} (${c.nextSlot.n}/${c.size}) · wants: ${c.activities.map(([a, n]) => `${a} ${n}`).join(", ")}`);
-    for (const m of c.members) console.log(`  ${m.canMakeBest ? "✓" : "✗"} ${m.name.padEnd(14)} ${m.city.padEnd(22)} ${String(m.miles).padStart(5)} mi${m.stretch ? "  STRETCH" : ""}${m.approx ? "  (neighborhood unknown)" : ""}`);
+    console.log(`  leaders: ${c.leaders ?? "none free"} · dates: ${c.dates.map((d) => `${d.label} (${d.n}/${c.size})`).join(" or ")}`);
+    for (const m of c.members) console.log(`  ${m.canMake.map((x) => (x ? "✓" : "✗")).join("")} ${m.name.padEnd(14)} ${m.city.padEnd(22)} ${String(m.miles).padStart(5)} mi${m.stretch ? "  STRETCH" : ""}${m.approx ? "  (neighborhood unknown)" : ""}`);
   }
+  if (moved.length) console.log(`\nMoved to a circle whose dates they can make: ${moved.map((m) => `${m.name} (${m.from} → ${m.to})`).join("; ")}`);
   if (held.length) console.log(`\nHeld (too far from every zone): ${result.held.map((h) => `${h.name} (${h.city}, ${h.miles} mi from ${h.nearestZone})`).join("; ")}`);
   if (result.waitlist.length) console.log(`Waitlist: ${result.waitlist.map((w) => `${w.name} (${w.city}, ${w.miles} mi from ${w.nearestZone})`).join("; ")}`);
+  if (paused.length) console.log(`\nPaused (left out until they turn meetups back on): ${paused.join(", ")}`);
   if (unknownCity.length) console.log(`\n⚠  No coordinates for: ${unknownCity.join("; ")} — add the city to PLACES.`);
   console.log(`\nfull detail → .tmp/signup-groups.json`);
 }

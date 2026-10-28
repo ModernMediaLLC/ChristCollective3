@@ -6,7 +6,8 @@ import { getImageUrl } from "@/lib/api-config";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check, Navigation } from "lucide-react";
+import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check, Navigation, PauseCircle, SlidersHorizontal } from "lucide-react";
+import { formatDate, isPaused } from "@shared/matchup";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   coffee: "Coffee", hiking: "Hiking", hike: "Hiking", run: "Run", running: "Run", book: "Book Club",
@@ -35,11 +36,15 @@ export function MeetupBanner() {
   const optedIn = !!data?.matchupRequest;
   const waitlisted = !!data?.waitlisted;
 
-  // ── State A: never opted in ──
+  const req = data?.matchupRequest || {};
+  const paused = optedIn && isPaused(req);
+  const pausedNote = req.resumeOn ? `Paused until ${formatDate(req.resumeOn)}` : "Paused";
+
+  // ── State A: never opted in ── /join collects what matching needs (city, birthday, times, activities)
   if (circles.length === 0 && !optedIn) {
     return (
       <button
-        onClick={() => navigate("/matchups")}
+        onClick={() => navigate("/join")}
         className="w-full text-left rounded-2xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#1a1506] to-[#0A0A0A] p-4 flex items-center gap-3 hover:border-[#D4AF37]/50 transition-colors"
       >
         <div className="w-11 h-11 rounded-full bg-[#D4AF37]/15 flex items-center justify-center shrink-0">
@@ -54,23 +59,24 @@ export function MeetupBanner() {
     );
   }
 
-  // ── State B: opted in, not yet placed in a circle ──
+  // ── State B: opted in, not yet placed in a circle (or paused) ── tap → Meetup preferences
   if (circles.length === 0 && optedIn) {
-    const req = data!.matchupRequest || {};
     return (
       <button
         onClick={() => navigate("/matchups")}
         className="w-full text-left rounded-2xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#1a1506] to-[#0A0A0A] p-4 flex items-center gap-3 hover:border-[#D4AF37]/50 transition-colors"
       >
         <div className="w-11 h-11 rounded-full bg-[#D4AF37]/15 flex items-center justify-center shrink-0">
-          <Check className="w-5 h-5 text-[#D4AF37]" />
+          {paused ? <PauseCircle className="w-5 h-5 text-[#D4AF37]" /> : <Check className="w-5 h-5 text-[#D4AF37]" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white font-semibold text-sm">{waitlisted ? "You're on the waitlist" : "You're on the list ✓"}</p>
+          <p className="text-white font-semibold text-sm">{waitlisted ? "You're on the waitlist" : paused ? `Meetups ${pausedNote.toLowerCase()}` : "You're on the list ✓"}</p>
           <p className="text-gray-400 text-xs truncate">
             {waitlisted
               ? "We're launching in LA first — we'll reach out when we're in your area."
-              : `We'll text you when your ${req.activity ? prettyActivity(req.activity).toLowerCase() + " " : ""}circle is ready. Tap to change.`}
+              : paused
+                ? "You won't be put in a circle until then. Tap to resume or change."
+                : `We'll text you when your ${req.activity ? prettyActivity(req.activity).toLowerCase() + " " : ""}circle is ready. Tap to change times or pause.`}
           </p>
         </div>
         <ChevronRight className="w-5 h-5 text-gray-500 shrink-0" />
@@ -126,15 +132,39 @@ export function MeetupBanner() {
           </div>
           <ChevronRight className="w-5 h-5 text-gray-500 shrink-0 self-center" />
         </button>
-        {directions && (
-          <a
-            href={directions}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 border-t border-[#D4AF37]/15 py-2.5 text-xs font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/5 transition-colors"
+        {upcoming ? (
+          <div className="flex border-t border-[#D4AF37]/15">
+            {directions && (
+              <a
+                href={directions}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/5 transition-colors"
+              >
+                <Navigation className="w-3.5 h-3.5" /> Get directions
+              </a>
+            )}
+            {!relevant.hosting && (
+              <button
+                onClick={() => navigate("/matchups")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-gray-400 hover:text-white hover:bg-white/[0.03] transition-colors ${directions ? "border-l border-[#D4AF37]/15" : ""}`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Preferences
+              </button>
+            )}
+          </div>
+        ) : !relevant.hosting && (
+          // After a meetup: are they in for the next round? (stay in the loop, pause, or change times)
+          <button
+            onClick={() => navigate("/matchups")}
+            className="w-full flex items-center gap-2 border-t border-[#D4AF37]/15 px-4 py-3 text-left hover:bg-[#D4AF37]/5 transition-colors"
           >
-            <Navigation className="w-3.5 h-3.5" /> Get directions
-          </a>
+            <span className="flex-1 min-w-0">
+              <span className="block text-xs font-semibold text-white">{paused ? `Meetups ${pausedNote.toLowerCase()}` : "Up for another round? You're in."}</span>
+              <span className="block text-[11px] text-gray-500">{paused ? "Tap to turn them back on or change your times." : "Pause, block out dates, or change your times."}</span>
+            </span>
+            <span className="text-xs font-semibold text-[#D4AF37] shrink-0">{paused ? "Resume" : "Manage"}</span>
+          </button>
         )}
       </div>
 
@@ -193,7 +223,7 @@ function MeetupsDialog({ open, onOpenChange, circles, selfId, navigate }: { open
         )}
 
         <Button onClick={() => { onOpenChange(false); navigate("/matchups"); }} className="w-full mt-3 bg-[#D4AF37] text-black hover:bg-[#C4A030] font-semibold">
-          Opt in for the next meetup
+          Meetup preferences
         </Button>
       </DialogContent>
     </Dialog>

@@ -2058,6 +2058,7 @@ export class DatabaseStorage implements IStorage {
           displayName: users.displayName, username: users.username, profileImageUrl: users.profileImageUrl,
           city: users.city, disciplines: users.disciplines, phone: users.phone, email: users.email,
           birthdate: users.birthdate, smsOptIn: users.smsOptIn, rsvp: matchCircleMembers.rsvp,
+          matchupRequest: users.matchupRequest,
         })
         .from(matchCircleMembers)
         .innerJoin(users, eq(users.id, matchCircleMembers.userId))

@@ -6,6 +6,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db, pool } from "./db";
 import { storage } from "./storage";
 import { matchCircleMembers, matchCircles, textMessages, users } from "@shared/schema";
+import { isPaused } from "@shared/matchup";
 import * as blooio from "./blooio";
 
 const RSVP = ["confirmed", "declined", "opted_out"] as const;
@@ -96,6 +97,8 @@ export async function textCircle(circleId: number, template: string, o: { send: 
     const who = { userId: m.id, name: firstName(m), phoneEnd: chatId ? chatId.slice(-4) : null };
     if (!chatId) { skipped.push({ ...who, reason: "No valid phone number" }); continue; }
     if (m.smsOptIn !== true || m.rsvp === "opted_out") { skipped.push({ ...who, reason: "Hasn't agreed to texts" }); continue; }
+    // Paused matching = out of the loop, but someone who already said yes to this circle still gets its texts
+    if (isPaused(m.matchupRequest) && m.rsvp !== "confirmed") { skipped.push({ ...who, reason: "Paused their meetups" }); continue; }
     const dup = await db.select({ id: textMessages.id }).from(textMessages).where(and(eq(textMessages.chatId, chatId), eq(textMessages.body, text),
       eq(textMessages.direction, "outbound"), gte(textMessages.sentAt, since), sql`${textMessages.status} <> 'failed'`)).limit(1);
     if (dup.length) { skipped.push({ ...who, reason: "Already sent this exact text" }); continue; }

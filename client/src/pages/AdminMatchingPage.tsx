@@ -11,6 +11,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
 import { ageFrom } from "@/lib/utils";
 import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare } from "lucide-react";
+import { formatDate, formatRange, isPaused, upcomingBlackouts } from "@shared/matchup";
+
+// What a member set on their Meetup preferences page that matters for matching: paused, and dates they can't make
+function PrefsFlags({ mr, compact }: { mr: any; compact?: boolean }) {
+  const paused = isPaused(mr), off = upcomingBlackouts(mr);
+  if (!paused && !off.length) return null;
+  const offText = off.map(formatRange).join(", ");
+  return (
+    <>
+      {paused && <Badge className="bg-gray-700/40 text-gray-300 border border-gray-600 text-[10px] shrink-0">Paused{mr.resumeOn ? ` until ${formatDate(mr.resumeOn)}` : ""}</Badge>}
+      {off.length > 0 && (compact
+        ? <Badge title={`Can't make: ${offText}`} className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] shrink-0">{off.length} blocked</Badge>
+        : <span className="w-full text-[10px] text-amber-300/90">Can't make: {offText}</span>)}
+    </>
+  );
+}
 
 const name = (m: any) => m?.displayName || [m?.firstName, m?.lastName].filter(Boolean).join(" ") || m?.username || "Member";
 const CIRCLE_STATUS = ["draft", "confirmed", "sent", "completed"];
@@ -159,6 +175,7 @@ export default function AdminMatchingPage() {
                        <span className="text-xs text-white truncate flex-1">{name(m)}</span>
                        {ageFrom(m.birthdate) !== null && <span className="text-[10px] text-gray-400 shrink-0">{ageFrom(m.birthdate)}</span>}
                        {m.city && <span className="text-[10px] text-gray-500 truncate max-w-[70px]">{m.city}</span>}
+                       <PrefsFlags mr={m.matchupRequest} compact />
                        <button onClick={() => unassign.mutate({ circleId: c.id, userId: m.id })} className="text-gray-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                      </div>
                    ))}
@@ -192,6 +209,7 @@ function LeadCard({ lead, circles, onAssign }: { lead: any; circles: any[]; onAs
             <Badge key={a} className="bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[10px]">{a}</Badge>
           ))}
           {mr.slot && <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-400">{mr.slot}</Badge>}
+          <PrefsFlags mr={mr} />
         </div>
       )}
       {circles.length > 0 && (

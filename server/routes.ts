@@ -45,6 +45,7 @@ import { pool } from "./db";
 import { sendMetaEvent } from "./metaCapi";
 import { planCircles } from "./matching";
 import { registerTextingRoutes } from "./texting";
+import { FLEXIBLE, MATCHUP_ACTIVITIES, MATCHUP_WINDOWS, MAX_BLACKOUTS, isIsoDate, isPaused, laToday } from "@shared/matchup";
 
 // Instagram handles: accept "@handle", "handle" or an instagram.com URL; store the bare handle
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
@@ -367,6 +368,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Matchup request: user picks a time + an activity for the next cycle
+  // Legacy opt-in (the old /matchups page, still in app builds made before Oct 2026): one slot + one activity.
+  // Merges into what the member already set (availability, blackouts…) instead of replacing it, and un-pauses.
   app.post("/api/matchups/request", isAuthenticated, async (req: any, res) => {
     try {
       const { slot, activity, smsOptIn } = req.body || {};
@@ -375,13 +378,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const me = await storage.getUser(req.user.id);
       const consented = (me as any)?.smsOptIn === true || smsOptIn === true;
       if (!consented) return res.status(400).json({ message: "SMS consent is required to be matched.", needsSmsConsent: true });
-      const update: any = { matchupRequest: { slot: String(slot), activity: String(activity), requestedAt: new Date().toISOString() } };
+      const prev = (me as any)?.matchupRequest || {};
+      const LEGACY_SLOT: Record<string, string> = { sat: "Saturday afternoons", sun: "Sunday afternoons", tue: "Weekday evenings" };
+      const availability = Array.isArray(prev.availability) && prev.availability.length ? prev.availability : [LEGACY_SLOT[slot] || String(slot)];
+      const activities = [String(activity), ...(Array.isArray(prev.activities) ? prev.activities : []).filter((a: string) => a !== activity)].slice(0, 3);
+      const update: any = { matchupRequest: {
+        ...prev, availability, slot: availability.join(", "), activity: activities[0], activities,
+        paused: false, resumeOn: null, requestedAt: prev.requestedAt || new Date().toISOString(),
+      } };
       if (smsOptIn === true) update.smsOptIn = true;
       const updatedUser = await storage.updateUser(req.user.id, update);
       res.json({ ok: true, matchupRequest: (updatedUser as any)?.matchupRequest });
     } catch (error) {
       console.error("Error saving matchup request:", error);
       res.status(500).json({ message: "Failed to save your matchup" });
+    }
+  });
+
+  // A member's Matchup preferences (see shared/matchup.ts): weekly times, activities, paused / resume date,
+  // and blocked-out dates. Only the fields sent are changed. Joining here for the first time needs the
+  // same texting consent as /join, plus times and activities.
+  app.patch("/api/matchups/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const b = req.body || {};
+      const me = await storage.getUser(req.user.id);
+      const prev = (me as any)?.matchupRequest || null;
+      const now = new Date().toISOString(), today = laToday();
+      if (!prev && (me as any)?.smsOptIn !== true && b.smsOptIn !== true) {
+        return res.status(400).json({ message: "Meetups are set up by text, so we need your OK to text you.", needsSmsConsent: true });
+      }
+      const next: any = { ...(prev || {}) };
+
+      if (b.availability !== undefined) {
+        const picked: string[] = Array.isArray(b.availability) ? b.availability.map(String) : [];
+        const clean = picked.includes(FLEXIBLE) ? [FLEXIBLE] : MATCHUP_WINDOWS.filter((w) => picked.includes(w));
+        if (!clean.length) return res.status(400).json({ message: "Pick at least one time that usually works, or \"I'm flexible\"." });
+        next.availability = clean;
+        next.slot = clean.join(", ");
+      }
+      if (b.activities !== undefined) {
+        const picked: string[] = Array.isArray(b.activities) ? b.activities.map(String) : [];
+        const acts = Array.from(new Set(picked)).filter((a) => (MATCHUP_ACTIVITIES as readonly string[]).includes(a)).slice(0, 3);
+        if (!acts.length) return res.status(400).json({ message: "Pick at least one activity." });
+        next.activities = acts;
+        next.activity = acts[0];
+      }
+      if (b.blackouts !== undefined) {
+        if (!Array.isArray(b.blackouts)) return res.status(400).json({ message: "Invalid dates" });
+        const list = b.blackouts
+          .filter((x: any) => isIsoDate(x?.from) && isIsoDate(x?.to))
+          .map((x: any) => (x.from <= x.to ? { from: x.from, to: x.to } : { from: x.to, to: x.from }))
+          .filter((x: any) => x.to >= today)
+          .sort((x: any, y: any) => x.from.localeCompare(y.from));
+        if (list.length > MAX_BLACKOUTS) return res.status(400).json({ message: `Up to ${MAX_BLACKOUTS} blocked-out stretches.` });
+        if (list.some((x: any) => (Date.parse(x.to) - Date.parse(x.from)) / 864e5 > 366)) {
+          return res.status(400).json({ message: "A blocked-out stretch can be a year at most. To step away longer, pause matching instead." });
+        }
+        next.blackouts = list;
+      }
+      if (b.paused !== undefined) {
+        if (b.paused === true) {
+          if (b.resumeOn != null && (!isIsoDate(b.resumeOn) || b.resumeOn <= today)) {
+            return res.status(400).json({ message: "Pick a date after today to start matching again." });
+          }
+          next.pausedAt = isPaused(prev, today) ? prev.pausedAt || now : now;
+          next.paused = true;
+          next.resumeOn = b.resumeOn || null;
+        } else {
+          if (prev?.paused) next.resumedAt = now;
+          next.paused = false;
+          next.resumeOn = null;
+        }
+      }
+
+      if (!prev) {
+        if (!Array.isArray(next.availability) || !next.availability.length || !Array.isArray(next.activities) || !next.activities.length) {
+          return res.status(400).json({ message: "Pick the times that work and an activity." });
+        }
+        next.general = true;
+        next.requestedAt = now;
+      }
+      next.updatedAt = now;
+
+      const update: any = { matchupRequest: next };
+      if (b.smsOptIn === true) update.smsOptIn = true;
+      const updated = await storage.updateUser(req.user.id, update);
+      res.json({ ok: true, matchupRequest: (updated as any)?.matchupRequest ?? next });
+    } catch (error) {
+      console.error("Error saving matchup preferences:", error);
+      res.status(500).json({ message: "Couldn't save your preferences" });
     }
   });
 
@@ -5249,12 +5334,12 @@ ${merged.requiresRegistration ? 'Registration required!' : 'All are welcome!'}`;
       const minMembers = Math.min(memberSlots, Math.max(2, parseInt(req.body?.minMembers) || Math.ceil(memberSlots * 2 / 3)));
       const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-      // Everyone with a request who isn't waitlisted and isn't already placed this cycle. People in a
+      // Everyone with a request who isn't waitlisted, paused, or already placed this cycle. People in a
       // locked-in circle (leaders assigned, or confirmed/sent) in any cycle are left alone too.
       const placed = new Set((await storage.getMatchCircles(cycle)).flatMap((c: any) => c.members.map((m: any) => m.id)));
       const locked = new Set((await storage.getMatchCircles()).filter((c: any) => c.leaders || ["confirmed", "sent"].includes(c.status))
         .flatMap((c: any) => c.members.map((m: any) => m.id)));
-      const pool = (await storage.getLeads()).filter((l: any) => l.matchupRequest && !l.waitlisted && !placed.has(l.id) && !locked.has(l.id));
+      const pool = (await storage.getLeads()).filter((l: any) => l.matchupRequest && !l.waitlisted && !isPaused(l.matchupRequest) && !placed.has(l.id) && !locked.has(l.id));
 
       const { circles, unmatchedIds } = planCircles(pool, { memberSlots, minMembers });
       for (let i = 0; i < circles.length; i++) {
