@@ -42,8 +42,9 @@ export function toE164(phone: string | null | undefined): string | null {
 export const chatPath = (chatId: string) => `/chats/${encodeURIComponent(chatId)}`;
 
 // Queues a text. idempotencyKey makes a retried request a no-op instead of a second text.
+// Sent to several numbers, the response carries the group's id ("grp_…"), which is its chat id from then on.
 export function sendText(chatId: string, text: string, idempotencyKey?: string) {
-  return call<{ message_id: string; status: string; chat_id?: string }>(`${chatPath(chatId)}/messages`, {
+  return call<{ message_id: string; status: string; chat_id?: string; group_id?: string }>(`${chatPath(chatId)}/messages`, {
     method: "POST",
     headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey.slice(0, 200) } : {},
     body: JSON.stringify({ text }),
@@ -55,6 +56,14 @@ export const listChats = (limit = 100, offset = 0) =>
 
 export const listMessages = (chatId: string, limit = 100, offset = 0) =>
   call<{ chat_id: string; messages: BlooioMessage[]; pagination: { total: number } }>(`${chatPath(chatId)}/messages?limit=${limit}&offset=${offset}`);
+
+// Status and transport of one message: protocol goes pending → imessage / sms / rcs / unknown
+export const getMessageStatus = (chatId: string, messageId: string) =>
+  call<{ status: string | null; protocol: string | null; error: string | null }>(`${chatPath(chatId)}/messages/${encodeURIComponent(messageId)}/status`);
+
+// Whether a number can get iMessage. 404 for a number Blooio has never texted.
+export const getCapabilities = (phone: string) =>
+  call<{ capabilities?: { imessage?: boolean; sms?: boolean } }>(`/contacts/${encodeURIComponent(phone)}/capabilities`);
 
 export const getAccount = () =>
   call<{ valid: boolean; devices?: { phone_number: string; is_active: boolean }[] }>(`/me`);

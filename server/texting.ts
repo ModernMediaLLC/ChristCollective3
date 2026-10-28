@@ -58,11 +58,12 @@ export const personalize = (template: string, u: { firstName?: string | null; di
 export async function sendAndLog(o: { chatId: string; text: string; userId?: string | null; circleId?: number | null; sentBy?: string | null; idempotencyKey?: string }) {
   try {
     const r = await blooio.sendText(o.chatId, o.text, o.idempotencyKey);
+    const chatId = r.group_id || r.chat_id || o.chatId; // a group text is stored under its grp_ id, like Blooio lists it
     await db.insert(textMessages).values({
-      chatId: r.chat_id || o.chatId, userId: o.userId ?? null, circleId: o.circleId ?? null, direction: "outbound",
+      chatId, userId: o.userId ?? null, circleId: o.circleId ?? null, direction: "outbound",
       body: o.text, status: r.status || "queued", blooioMessageId: r.message_id, sentBy: o.sentBy ?? null,
     }).onConflictDoNothing();
-    return { ok: true as const, messageId: r.message_id, chatId: r.chat_id || o.chatId };
+    return { ok: true as const, messageId: r.message_id, chatId };
   } catch (e: any) {
     const error = String(e?.message || e).slice(0, 300);
     // Keep one failed row per text: a retry replaces the earlier failure instead of piling up
