@@ -112,6 +112,7 @@ import {
 import { db } from "./db";
 import { eq, ne, desc, asc, and, or, ilike, like, sql, isNull, isNotNull, inArray } from "drizzle-orm";
 import { generateSlug } from "./utils";
+import { leaderNames, leaderNamesFor } from "./leaders";
 
 // Interface for storage operations
 export interface IStorage {
@@ -2098,12 +2099,20 @@ export class DatabaseStorage implements IStorage {
   // Draft circles are admin-only (auto-group proposals, circles still being polled): members see a
   // circle once it's confirmed, and only if they said yes (RSVPs are marked from the poll replies), so
   // someone who declined or never answered doesn't get it. Only member-safe fields go out — the
-  // circle's notes and group-chat id are admin-only.
+  // circle's notes and group-chat id are admin-only. Leaders aren't member rows (the circle names them in
+  // `leaders`), so a team member also gets the confirmed circles they host, marked `hosting`.
   async getUserMeetups(userId: string) {
     const going = eq(matchCircleMembers.rsvp, "confirmed");
     const rows = await db.select({ circleId: matchCircleMembers.circleId }).from(matchCircleMembers)
       .where(and(eq(matchCircleMembers.userId, userId), going));
-    const ids = Array.from(new Set(rows.map((r) => r.circleId)));
+    const [me] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+    const mine = leaderNamesFor(me?.username);
+    const hosted = mine.length
+      ? (await db.select({ id: matchCircles.id, leaders: matchCircles.leaders }).from(matchCircles)
+          .where(and(isNotNull(matchCircles.leaders), ne(matchCircles.status, "draft"))))
+          .filter((c) => leaderNames(c.leaders).some((n) => mine.includes(n))).map((c) => c.id)
+      : [];
+    const ids = Array.from(new Set([...rows.map((r) => r.circleId), ...hosted]));
     if (!ids.length) return [];
     const circles = await db.select().from(matchCircles)
       .where(and(inArray(matchCircles.id, ids), ne(matchCircles.status, "draft")))
@@ -2126,7 +2135,7 @@ export class DatabaseStorage implements IStorage {
         }).from(venues).where(eq(venues.id, c.venueId));
         venue = v || null;
       }
-      return { id: c.id, activity: c.activity, slot: c.slot, area: c.area, status: c.status, leaders: c.leaders, createdAt: c.createdAt, members, venue };
+      return { id: c.id, activity: c.activity, slot: c.slot, area: c.area, status: c.status, leaders: c.leaders, hosting: hosted.includes(c.id), createdAt: c.createdAt, members, venue };
     }));
   }
 

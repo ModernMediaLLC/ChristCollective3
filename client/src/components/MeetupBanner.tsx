@@ -100,7 +100,7 @@ export function MeetupBanner() {
               : <Coffee className="w-5 h-5 text-[#D4AF37]" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">{upcoming ? "Your next meetup" : "Your last meetup"}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">{relevant.hosting ? (upcoming ? "You're hosting" : "You hosted") : upcoming ? "Your next meetup" : "Your last meetup"}</p>
             <p className="text-white font-semibold text-sm">
               {prettyActivity(relevant.activity)}{relevant.slot ? ` · ${relevant.slot}` : ""}
             </p>
