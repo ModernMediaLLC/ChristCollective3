@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { getImageUrl } from "@/lib/api-config";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Coffee, ChevronRight, MapPin, CalendarClock, Users, Check, Navigation, PauseCircle, SlidersHorizontal } from "lucide-react";
-import { formatDate, isPaused } from "@shared/matchup";
+import { formatDate, isPaused, nextCircleOf, type NextCircle } from "@shared/matchup";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   coffee: "Coffee", hiking: "Hiking", hike: "Hiking", run: "Run", running: "Run", book: "Book Club",
@@ -154,22 +157,60 @@ export function MeetupBanner() {
             )}
           </div>
         ) : !relevant.hosting && (
-          // After a meetup: are they in for the next round? (stay in the loop, pause, or change times)
-          <button
-            onClick={() => navigate("/matchups")}
-            className="w-full flex items-center gap-2 border-t border-[#D4AF37]/15 px-4 py-3 text-left hover:bg-[#D4AF37]/5 transition-colors"
-          >
-            <span className="flex-1 min-w-0">
-              <span className="block text-xs font-semibold text-white">{paused ? `Meetups ${pausedNote.toLowerCase()}` : "Up for another round? You're in."}</span>
-              <span className="block text-[11px] text-gray-500">{paused ? "Tap to turn them back on or change your times." : "Pause, block out dates, or change your times."}</span>
-            </span>
-            <span className="text-xs font-semibold text-[#D4AF37] shrink-0">{paused ? "Resume" : "Manage"}</span>
-          </button>
+          // After a meetup: who they'd like to meet next, and are they in for the next round? (stay in the loop,
+          // pause, or change times)
+          <>
+            {optedIn && !paused && <NextCirclePicker picked={req.nextCircle ? nextCircleOf(req) : null} />}
+            <button
+              onClick={() => navigate("/matchups")}
+              className="w-full flex items-center gap-2 border-t border-[#D4AF37]/15 px-4 py-3 text-left hover:bg-[#D4AF37]/5 transition-colors"
+            >
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs font-semibold text-white">{paused ? `Meetups ${pausedNote.toLowerCase()}` : "Up for another round? You're in."}</span>
+                <span className="block text-[11px] text-gray-500">{paused ? "Tap to turn them back on or change your times." : "Pause, block out dates, or change your times."}</span>
+              </span>
+              <span className="text-xs font-semibold text-[#D4AF37] shrink-0">{paused ? "Resume" : "Manage"}</span>
+            </button>
+          </>
         )}
       </div>
 
       <MeetupsDialog open={open} onOpenChange={setOpen} circles={circles} selfId={user.id} navigate={navigate} />
     </>
+  );
+}
+
+const NEXT_CHOICES: { v: NextCircle; l: string }[] = [
+  { v: "same", l: "Keep my circle" }, { v: "mix", l: "Mix it up" }, { v: "new", l: "Meet new people" },
+];
+
+// One tap for who they'd like to meet next round — the same choice as on the Meetup preferences page.
+// Nothing is highlighted until they've picked (unset counts as "mix" when grouping).
+function NextCirclePicker({ picked }: { picked: NextCircle | null }) {
+  const { toast } = useToast();
+  const save = useMutation({
+    mutationFn: async (nextCircle: NextCircle) => apiRequest("/api/matchups/preferences", { method: "PATCH", data: { nextCircle } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/meetups"] });
+      toast({ title: "Saved", description: "We'll use this when we form your next circle." });
+    },
+    onError: () => toast({ title: "Couldn't save", description: "Please try again.", variant: "destructive" }),
+  });
+  const on = save.isPending ? save.variables : picked;
+  return (
+    <div className="border-t border-[#D4AF37]/15 px-4 py-3">
+      <p className="text-xs font-semibold text-white mb-2">Next time, who would you like to meet?</p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {NEXT_CHOICES.map((c) => (
+          <button key={c.v} onClick={() => save.mutate(c.v)} disabled={save.isPending} aria-pressed={on === c.v}
+            className={cn("rounded-lg border px-1.5 py-2 text-[11px] font-medium leading-tight transition-colors",
+              on === c.v ? "bg-[#D4AF37] border-[#D4AF37] text-black" : "border-gray-800 text-gray-300 hover:border-[#D4AF37]/60")}>
+            {c.l}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-gray-500 mt-2">Private to you. If your circle picks differently, those who keep it stay together and anyone who wants new people moves to a new circle.</p>
+    </div>
   );
 }
 

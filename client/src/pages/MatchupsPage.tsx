@@ -150,6 +150,25 @@ export default function MatchupsPage() {
           </p>
         )}
 
+        {(data?.circles || []).length > 0 && (
+          <Section title="Your next circle" sub="After a meetup, who would you like to meet next time?">
+            <div className="space-y-2">
+              <Choice on={nextCircle === "same"} onClick={() => setNextCircle("same")} Icon={Users} title="Keep my circle"
+                sub="Meet again with the same people. You'll stay with everyone from your circle who picks this too." />
+              <Choice on={nextCircle === "mix"} onClick={() => setNextCircle("mix")} Icon={Shuffle} title="Mix it up"
+                sub="Happy either way: some familiar faces, some new ones." />
+              <Choice on={nextCircle === "new"} onClick={() => setNextCircle("new")} Icon={UserPlus} title="Meet new people"
+                sub="A fresh circle with people you haven't met yet." />
+            </div>
+            <div className="mt-3 rounded-xl border border-gray-800 bg-[#0A0A0A] p-3 text-xs text-gray-400 space-y-1.5">
+              <p className="font-semibold text-gray-200">If your circle picks differently</p>
+              <p>Everyone who picks <span className="text-gray-200">Keep my circle</span> stays together, and we fill the open seats with new people.</p>
+              <p>Anyone who picks <span className="text-gray-200">Meet new people</span> moves to a different circle. <span className="text-gray-200">Mix it up</span> goes wherever fits best.</p>
+              <p>Your pick is private. No one in your circle sees it.</p>
+            </div>
+          </Section>
+        )}
+
         <Section title="Your meetups">
           <div className="space-y-2">
             <Choice on={!paused} onClick={() => setPaused(false)} Icon={PlayCircle} title="Keep me in the loop"
@@ -171,19 +190,6 @@ export default function MatchupsPage() {
             </div>
           )}
         </Section>
-
-        {(data?.circles || []).length > 0 && (
-          <Section title="Your next circle" sub="After a meetup, who would you like to meet next time?">
-            <div className="space-y-2">
-              <Choice on={nextCircle === "same"} onClick={() => setNextCircle("same")} Icon={Users} title="Keep my circle"
-                sub="Meet again with the same people. You'll stay with everyone from your circle who picks this too." />
-              <Choice on={nextCircle === "mix"} onClick={() => setNextCircle("mix")} Icon={Shuffle} title="Mix it up"
-                sub="Happy either way: some familiar faces, some new ones." />
-              <Choice on={nextCircle === "new"} onClick={() => setNextCircle("new")} Icon={UserPlus} title="Meet new people"
-                sub="A fresh circle with people you haven't met yet." />
-            </div>
-          </Section>
-        )}
 
         <Section title="Times that usually work" sub="Pick every time you can usually make. We choose meetup dates from these.">
           <div className="rounded-2xl border border-gray-800 bg-[#0A0A0A] p-3">
