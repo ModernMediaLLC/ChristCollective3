@@ -876,6 +876,8 @@ export const matchCircles = pgTable("match_circles", {
   notes: text("notes"),
   leaders: varchar("leaders"),                        // team members leading it, e.g. "Luis + EZ"
   groupChatId: varchar("group_chat_id"),              // Blooio chat id once the circle's group text exists
+  // Standing circles: when it meets, so the CRM calendar can show every upcoming date (CircleSchedule below)
+  schedule: jsonb("schedule"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -910,6 +912,7 @@ export const insertMatchCircleSchema = createInsertSchema(matchCircles)
 export type MatchCircle = typeof matchCircles.$inferSelect;
 export type InsertMatchCircle = z.infer<typeof insertMatchCircleSchema>;
 export type MatchCircleMember = typeof matchCircleMembers.$inferSelect;
+export type { CircleSchedule } from "./circleSchedule";
 
 // Insert schemas for group chats
 export const insertGroupChatQueueSchema = createInsertSchema(groupChatQueues)

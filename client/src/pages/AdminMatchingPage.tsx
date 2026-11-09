@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
 import { ageFrom } from "@/lib/utils";
-import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare, CalendarDays, LayoutGrid } from "lucide-react";
 import { formatDate, formatRange, isPaused, nextCircleOf, upcomingBlackouts } from "@shared/matchup";
+import CircleCalendar from "@/components/CircleCalendar";
 
 // What a member set on their Meetup preferences page that matters for matching: paused, dates they can't make,
 // and who they'd like to meet next ("mix", the default, isn't shown)
@@ -47,6 +48,7 @@ export default function AdminMatchingPage() {
   const [picked, setPicked] = useState<string | null>(null);
   const [circleSize, setCircleSize] = useState(8);
   const [guides, setGuides] = useState(2);
+  const [view, setView] = useState<"cards" | "calendar">("cards");
 
   const enabled = user?.isAdmin === true;
   const { data: leads = [] } = useQuery<any[]>({ queryKey: ["/api/admin/leads"], enabled });
@@ -152,8 +154,18 @@ export default function AdminMatchingPage() {
 
         {/* Circles / buckets */}
         <div className="lg:col-span-2">
-          <h2 className="font-bold mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#D4AF37]" /> Circles</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-bold flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#D4AF37]" /> Circles</h2>
+            <div className="ml-auto flex rounded-md border border-gray-800 overflow-hidden text-xs">
+              {(["cards", "calendar"] as const).map((v) => (
+                <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 flex items-center gap-1.5 ${view === v ? "bg-[#D4AF37] text-black font-semibold" : "text-gray-400 hover:text-white"}`}>
+                  {v === "cards" ? <LayoutGrid className="w-3.5 h-3.5" /> : <CalendarDays className="w-3.5 h-3.5" />}{v === "cards" ? "Cards" : "Calendar"}
+                </button>
+              ))}
+            </div>
+          </div>
           {circlesLoading ? <p className="text-gray-500 text-sm">Loading…</p> :
+           view === "calendar" ? <CircleCalendar circles={circles} /> :
            circles.length === 0 ? <div className="rounded-xl border border-dashed border-gray-800 p-8 text-center text-gray-500 text-sm">No circles yet. Hit <span className="text-[#D4AF37]">Auto-group</span> to build them from matchup requests, or add one manually.</div> :
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {circles.map((c) => (
