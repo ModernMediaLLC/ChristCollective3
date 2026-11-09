@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getImageUrl } from "@/lib/api-config";
 import { ageFrom } from "@/lib/utils";
-import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare, CalendarDays, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Trash2, X, Shield, Wand2, Users, MessagesSquare, CalendarDays, LayoutGrid, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react";
 import { formatDate, formatRange, isPaused, nextCircleOf, upcomingBlackouts } from "@shared/matchup";
 import CircleCalendar from "@/components/CircleCalendar";
 
@@ -49,6 +49,9 @@ export default function AdminMatchingPage() {
   const [circleSize, setCircleSize] = useState(8);
   const [guides, setGuides] = useState(2);
   const [view, setView] = useState<"cards" | "calendar">("cards");
+  // The unassigned pool eats a third of the width, which the calendar needs, so it folds to a rail there
+  const [poolOpen, setPoolOpen] = useState(true);
+  const [howOpen, setHowOpen] = useState(false);
 
   const enabled = user?.isAdmin === true;
   const { data: leads = [] } = useQuery<any[]>({ queryKey: ["/api/admin/leads"], enabled });
@@ -139,26 +142,43 @@ export default function AdminMatchingPage() {
         <Button onClick={() => newCircle.mutate()} variant="outline" className="h-9 border-gray-700 text-white"><Plus className="w-4 h-4 mr-1.5" /> New circle</Button>
       </div>
 
-      <div className="px-5 py-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Unassigned pool */}
-        <div className="lg:col-span-1">
-          <h2 className="font-bold mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-[#D4AF37]" /> Unassigned <span className="text-xs text-gray-600">{unassigned.length}</span></h2>
-          <p className="text-xs text-gray-600 mb-3">Auto-group finds people who share a time window and an activity ("flexible" and "open to anything" match everything), keeps ages close, and fills each circle leaving room for guides. Circles start as drafts — members only see their circle once you set it to confirmed.</p>
-          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-            {unassigned.length === 0 && <p className="text-gray-600 text-sm">Everyone's placed 🎉</p>}
-            {unassigned.map((l) => (
-              <LeadCard key={l.id} lead={l} circles={circles} onAssign={(circleId) => assign.mutate({ circleId, userId: l.id })} />
-            ))}
+      <div className={`px-5 py-5 grid grid-cols-1 gap-5 ${poolOpen ? "lg:grid-cols-3" : "lg:grid-cols-[auto_1fr]"}`}>
+        {/* Unassigned pool — collapses to a rail so the calendar gets the width */}
+        {!poolOpen ? (
+          <button
+            onClick={() => setPoolOpen(true)}
+            title={`Show the ${unassigned.length} unassigned`}
+            className="w-full lg:w-11 lg:h-fit lg:sticky lg:top-24 flex lg:flex-col items-center justify-center gap-2 rounded-xl border border-gray-800/60 bg-[#0A0A0A] py-2.5 lg:py-4 text-gray-400 hover:text-white hover:border-gray-700"
+          >
+            <Users className="w-4 h-4 text-[#D4AF37] shrink-0" />
+            <span className="text-xs font-semibold text-white">{unassigned.length}</span>
+            <span className="text-[11px] text-gray-500 lg:[writing-mode:vertical-rl] lg:rotate-180">Unassigned</span>
+            <ChevronRight className="w-4 h-4 shrink-0 lg:rotate-0 rotate-90" />
+          </button>
+        ) : (
+          <div className="lg:col-span-1">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="font-bold flex items-center gap-2"><Users className="w-4 h-4 text-[#D4AF37]" /> Unassigned <span className="text-xs text-gray-600">{unassigned.length}</span></h2>
+              <button onClick={() => setHowOpen((v) => !v)} title="How auto-group works" className={`${howOpen ? "text-[#D4AF37]" : "text-gray-600"} hover:text-white`}><HelpCircle className="w-3.5 h-3.5" /></button>
+              <button onClick={() => setPoolOpen(false)} title="Hide this panel" className="ml-auto text-gray-500 hover:text-white flex items-center gap-1 text-[11px]">Hide<ChevronLeft className="w-4 h-4" /></button>
+            </div>
+            {howOpen && <p className="text-xs text-gray-600 mb-3">Auto-group finds people who share a time window and an activity ("flexible" and "open to anything" match everything), keeps ages close, and fills each circle leaving room for guides. Circles start as drafts — members only see their circle once you set it to confirmed.</p>}
+            <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+              {unassigned.length === 0 && <p className="text-gray-600 text-sm">Everyone's placed 🎉</p>}
+              {unassigned.map((l) => (
+                <LeadCard key={l.id} lead={l} circles={circles} onAssign={(circleId) => assign.mutate({ circleId, userId: l.id })} />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Circles / buckets */}
-        <div className="lg:col-span-2">
+        <div className={poolOpen ? "lg:col-span-2" : "min-w-0"}>
           <div className="flex items-center gap-2 mb-3">
             <h2 className="font-bold flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#D4AF37]" /> Circles</h2>
             <div className="ml-auto flex rounded-md border border-gray-800 overflow-hidden text-xs">
               {(["cards", "calendar"] as const).map((v) => (
-                <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 flex items-center gap-1.5 ${view === v ? "bg-[#D4AF37] text-black font-semibold" : "text-gray-400 hover:text-white"}`}>
+                <button key={v} onClick={() => { setView(v); setPoolOpen(v === "cards"); }} className={`px-3 py-1.5 flex items-center gap-1.5 ${view === v ? "bg-[#D4AF37] text-black font-semibold" : "text-gray-400 hover:text-white"}`}>
                   {v === "cards" ? <LayoutGrid className="w-3.5 h-3.5" /> : <CalendarDays className="w-3.5 h-3.5" />}{v === "cards" ? "Cards" : "Calendar"}
                 </button>
               ))}
