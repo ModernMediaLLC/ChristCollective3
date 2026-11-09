@@ -15,12 +15,20 @@ export function skipOf(s: CircleSchedule, date: string) {
   return (s.skip ?? []).find((r) => date >= r.from && date <= r.to) ?? null;
 }
 
-// Every meetup date from `from` through `until`, with the skipped ones marked
+// Every meetup date from `from` through `until`, with the skipped ones marked.
+// `until` is capped: stepping toward a far-future date (e.g. "9999-12-31") would run past the largest
+// date JS can represent and make toISOString() throw, so callers can't hang or crash this by asking
+// for "everything". Use nextMeetup() when you only want the next one.
+const MAX_MEETUPS = 2000; // ~76 years of fortnightly circles
+
 export function meetupDates(s: CircleSchedule, from: string, until: string): { date: string; skipped: string | null }[] {
   const out: { date: string; skipped: string | null }[] = [];
+  if (!s.start || Number.isNaN(day(s.start).getTime())) return out;
   const step = Math.max(1, s.every) * 7;
-  for (let d = day(s.start); iso(d) <= until; d.setUTCDate(d.getUTCDate() + step)) {
+  const d = day(s.start);
+  for (let i = 0; i < MAX_MEETUPS; i++, d.setUTCDate(d.getUTCDate() + step)) {
     const date = iso(d);
+    if (date > until) break;
     if (date >= from) out.push({ date, skipped: skipOf(s, date)?.label ?? null });
   }
   return out;

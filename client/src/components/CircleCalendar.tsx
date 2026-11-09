@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
-import { meetupDates, type CircleSchedule } from "@shared/circleSchedule";
+import { meetupDates, nextMeetup, type CircleSchedule } from "@shared/circleSchedule";
 
 // Month calendar of a cycle's meetups for the Matching CRM. Standing circles repeat from their `schedule`
 // (holiday weeks shaded); other circles show the date(s) in their slot ("Wed Nov 11, 10am or Thu Nov 12, 10am").
@@ -35,7 +35,7 @@ function meetupsFor(circles: any[], from: string, until: string, today: string):
     const host = hostOf(c.leaders);
     const sched = c.schedule as CircleSchedule | null;
     if (sched?.start) {
-      const next = meetupDates(sched, today, "9999-12-31").find((m) => !m.skipped)?.date;
+      const next = nextMeetup(sched, today);
       for (const m of meetupDates(sched, from, until)) {
         const state = m.skipped ? "skipped" : m.date < today ? "done" : m.date === next ? (locked(c) ? "confirmed" : "waiting") : "planned";
         out.push({ date: m.date, time: sched.time, circle: c, host, state, skipLabel: m.skipped ?? undefined });
